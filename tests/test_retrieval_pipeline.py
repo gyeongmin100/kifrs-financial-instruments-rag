@@ -6,126 +6,120 @@ SRC = Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from accounting_rag.retrieval.pipeline import (  # noqa: E402
-    RetrievalPipeline,
-    build_rerank_candidates,
-)
+from accounting_rag.retrieval.pipeline import RetrievalConfig, RetrievalPipeline  # noqa: E402
 
 
-class FakeHybridRetriever:
-    def __init__(self, rows):
+class FakeHybrid:
+    def __init__(self, seeds):
+        self.seeds = seeds
+        self.calls = []
+
+    def search(self, question, *, standard_id=None, zone=None):
+        self.calls.append({"question": question, "standard_id": standard_id, "zone": zone})
+        return [dict(seed) for seed in self.seeds]
+
+
+class FakeSession:
+    def __init__(self, rows, recorder):
         self.rows = rows
-        self.calls = []
+        self.recorder = recorder
 
-    def search(self, question, **filters):
-        self.calls.append((question, filters))
-        return self.rows
+    def __enter__(self):
+        return self
 
+    def __exit__(self, *args):
+        return False
 
-class FakeGraphExpander:
-    def __init__(self, rows):
-        self.rows = rows
-        self.calls = []
-
-    def expand(self, question, seeds):
-        self.calls.append((question, seeds))
-        return self.rows
+    def run(self, _query, **parameters):
+        self.recorder.append(parameters)
+        return [dict(row) for row in self.rows]
 
 
-class FakeReranker:
-    def __init__(self):
-        self.calls = []
+class FakeDriver:
+    def __init__(self, rows=()):
+        self.rows = list(rows)
+        self.queries = []
 
-    def rerank(self, question, candidates, *, top_k=None):
-        self.calls.append((question, candidates, top_k))
-        return [{**candidate, "rerank_rank": rank}
-                for rank, candidate in enumerate(candidates[:top_k], 1)]
-
-
-def graph_row(node_id, *, hop=1, text="graph text", standard_id="1109", zone=None):
-    return {
-        "node_id": node_id,
-        "node_labels": ["Paragraph"],
-        "text": text,
-        "citation": "5.5.17",
-        "standard_id": standard_id,
-        "zone": zone,
-        "hop": hop,
-        "graph_score": 0.25,
-        "seed_chunk_ids": ["C1"],
-        "paths": [[{"edge_type": "REFERS_TO", "from_id": "A", "to_id": node_id}]],
-    }
+    def session(self, database=None):
+        self.queries.append({"database": database})
+        return FakeSession(self.rows, self.queries)
 
 
 class RetrievalPipelineTests(unittest.TestCase):
-    def test_runs_stages_in_order_and_preserves_graph_provenance(self):
-        seeds = [{"chunk_id": "C1", "text": "seed", "rrf_score": 0.03,
-                  "standard_id": "1109", "zone": "standard_body"}]
-        evidence = [graph_row("KIFRS1109-5.5.17", zone="standard_body")]
-        hybrid = FakeHybridRetriever(seeds)
-        graph = FakeGraphExpander(evidence)
-        reranker = FakeReranker()
-
-        output = RetrievalPipeline(hybrid, graph, reranker).retrieve(
-            "  expected loss?  ", standard_id="KIFRS1109",
-            zone="standard_body", top_k=2,
-        )
-
-        self.assertEqual(hybrid.calls, [
-            ("expected loss?", {"standard_id": "1109", "zone": "standard_body"})
+    def test_returns_hybrid_seeds_tagged_with_their_source(self):
+        hybrid = FakeHybrid([
+            {"chunk_id": "C1", "text": "본문 1"},
+            {"chunk_id": "C2", "text": "본문 2"},
         ])
-        self.assertEqual(graph.calls, [("expected loss?", seeds)])
-        question, candidates, top_k = reranker.calls[0]
-        self.assertEqual(question, "expected loss?")
-        self.assertEqual(top_k, 2)
-        self.assertEqual([item["chunk_id"] for item in candidates], [
-            "C1", "GRAPH::KIFRS1109-5.5.17"
-        ])
-        graph_candidate = candidates[1]
-        self.assertEqual(graph_candidate["graph_node_id"], "KIFRS1109-5.5.17")
-        self.assertEqual(graph_candidate["graph_hop"], 1)
-        self.assertEqual(graph_candidate["graph_score"], 0.25)
-        self.assertEqual(graph_candidate["graph_path"][0]["edge_type"], "REFERS_TO")
-        self.assertEqual(output["filters"], {
-            "standard_id": "1109", "zone": "standard_body"
-        })
-        self.assertEqual(output["result_count"], 2)
-
-    def test_excludes_hop_zero_empty_text_and_duplicate_graph_nodes(self):
-        rows = [
-            graph_row("SOURCE", hop=0),
-            graph_row("EMPTY", text="  "),
-            graph_row("TARGET"),
-            graph_row("TARGET", text="duplicate"),
-        ]
-        candidates = build_rerank_candidates(
-            [{"chunk_id": "C1"}, {"chunk_id": "C1"}], rows
+        output = RetrievalPipeline(hybrid, FakeDriver(), database="neo4j").retrieve(
+            " 기대신용손실은? ", standard_id="1109",
         )
-        self.assertEqual([item["chunk_id"] for item in candidates], [
-            "C1", "GRAPH::TARGET"
-        ])
+        self.assertEqual([item["chunk_id"] for item in output["results"]], ["C1", "C2"])
+        self.assertEqual({item["candidate_source"] for item in output["results"]}, {"hybrid"})
+        self.assertEqual(output["seed_count"], 2)
+        self.assertEqual(hybrid.calls[0]["question"], "기대신용손실은?")
+        self.assertEqual(hybrid.calls[0]["standard_id"], "1109")
 
-    def test_graph_candidates_obey_standard_and_zone_filters(self):
-        rows = [
-            graph_row("KEEP", standard_id="1109", zone="standard_body"),
-            graph_row("WRONG-STANDARD", standard_id="1032", zone="standard_body"),
-            graph_row("WRONG-ZONE", standard_id="1109", zone="appendix"),
-            graph_row("UNKNOWN-ZONE", standard_id="1109", zone=None),
-        ]
-        candidates = build_rerank_candidates(
-            [], rows, standard_id="1109", zone="standard_body"
+    def test_appends_sibling_chunks_of_a_paragraph_split_across_chunks(self):
+        hybrid = FakeHybrid([
+            {"chunk_id": "KIFRS1032-11-C01", "text": "금융자산은 다음의 자산을 말한다."},
+        ])
+        driver = FakeDriver([
+            {"chunk_id": "KIFRS1032-11-C02", "text": "금융부채는 다음의 부채를 말한다."},
+        ])
+        output = RetrievalPipeline(hybrid, driver, database="neo4j").retrieve("금융자산의 정의")
+        self.assertEqual(
+            [item["chunk_id"] for item in output["results"]],
+            ["KIFRS1032-11-C01", "KIFRS1032-11-C02"],
         )
-        self.assertEqual([item["chunk_id"] for item in candidates], ["GRAPH::KEEP"])
+        self.assertEqual(output["results"][1]["candidate_source"], "sibling")
+        self.assertEqual(output["sibling_count"], 1)
+
+    def test_sibling_lookup_skips_chunks_already_retrieved(self):
+        hybrid = FakeHybrid([{"chunk_id": "C1", "text": "본문"}])
+        driver = FakeDriver([{"chunk_id": "C1", "text": "본문"}])
+        output = RetrievalPipeline(hybrid, driver, database="neo4j").retrieve("질문")
+        self.assertEqual([item["chunk_id"] for item in output["results"]], ["C1"])
+        self.assertEqual(output["sibling_count"], 0)
+
+    def test_sibling_lookup_is_skipped_when_disabled(self):
+        hybrid = FakeHybrid([{"chunk_id": "C1", "text": "본문"}])
+        driver = FakeDriver([{"chunk_id": "C2", "text": "형제"}])
+        output = RetrievalPipeline(
+            hybrid, driver, database="neo4j", config=RetrievalConfig(max_siblings=0),
+        ).retrieve("질문")
+        self.assertEqual(output["sibling_count"], 0)
+        self.assertEqual(driver.queries, [])
+
+    def test_top_k_limits_the_seeds_passed_on(self):
+        hybrid = FakeHybrid([{"chunk_id": f"C{index}", "text": "본문"} for index in range(20)])
+        output = RetrievalPipeline(
+            hybrid, FakeDriver(), database="neo4j", config=RetrievalConfig(max_siblings=0),
+        ).retrieve("질문", top_k=3)
+        self.assertEqual(output["result_count"], 3)
 
     def test_empty_question_stops_before_dependencies(self):
-        hybrid = FakeHybridRetriever([])
-        graph = FakeGraphExpander([])
-        reranker = FakeReranker()
+        hybrid = FakeHybrid([])
+        driver = FakeDriver()
         with self.assertRaises(ValueError):
-            RetrievalPipeline(hybrid, graph, reranker).retrieve("  ")
+            RetrievalPipeline(hybrid, driver).retrieve("  ")
         self.assertEqual(hybrid.calls, [])
-        self.assertEqual(graph.calls, [])
-        self.assertEqual(reranker.calls, [])
+        self.assertEqual(driver.queries, [])
+
+
+class RetrievalConfigTests(unittest.TestCase):
+    def test_rejects_invalid_values(self):
+        with self.assertRaises(ValueError):
+            RetrievalConfig(top_k=0)
+        with self.assertRaises(ValueError):
+            RetrievalConfig(max_siblings=-1)
+
+    def test_reads_the_retrieval_section(self):
+        config = RetrievalConfig.from_yaml(
+            Path(__file__).resolve().parents[1] / "config" / "retrieval.yaml"
+        )
+        self.assertGreater(config.top_k, 0)
+        self.assertGreaterEqual(config.max_siblings, 0)
 
 
 if __name__ == "__main__":

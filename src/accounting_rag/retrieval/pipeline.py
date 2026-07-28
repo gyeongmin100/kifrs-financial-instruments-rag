@@ -1,114 +1,126 @@
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Sequence
+
+import yaml
 
 from accounting_rag.retrieval.hybrid import normalize_standard_id
 
 
-def _graph_candidate(evidence: Mapping[str, Any]) -> dict[str, Any] | None:
-    """Convert one graph node into the candidate shape expected by the reranker."""
-    hop = int(evidence.get("hop", 0))
-    text = str(evidence.get("text") or "").strip()
-    node_id = str(evidence.get("node_id") or "").strip()
-    if hop < 1 or not text or not node_id:
-        return None
-
-    paths = list(evidence.get("paths") or [])
-    labels = [str(label) for label in evidence.get("node_labels") or []]
-    return {
-        "chunk_id": f"GRAPH::{node_id}",
-        "candidate_source": "graph",
-        "text": text,
-        "standard_id": evidence.get("standard_id"),
-        "zone": evidence.get("zone"),
-        "chunk_type": labels[0] if labels else None,
-        "citation_label": evidence.get("citation"),
-        "source_channels": ["graph"],
-        "graph_node_id": node_id,
-        "graph_path": paths[0] if paths else [],
-        "graph_paths": paths,
-        "graph_hop": hop,
-        "graph_distance": hop,
-        "graph_score": float(evidence.get("graph_score", 0.0)),
-        "graph_seed_chunk_ids": list(evidence.get("seed_chunk_ids") or []),
-    }
+# 청킹 단계에서 한 문단의 하위항목(⑴ → ㈎ → ①)은 부모 줄기와 함께 한 청크에 담긴다.
+# 다만 문단이 길면 크기 때문에 여러 청크로 갈리는데(전체 문단의 약 3%), 그때 뒷부분만
+# 검색에 걸리면 앞부분이 빠진 채로 답변이 만들어진다. 같은 문단에서 나온 나머지 청크를
+# 함께 붙여 그 빈틈을 메운다.
+_SIBLING_QUERY = """
+MATCH (hit:Chunk)-[:DERIVED_FROM]->(p:Paragraph)<-[:DERIVED_FROM]-(sibling:Chunk)
+WHERE hit.chunk_id IN $chunk_ids
+  AND sibling.searchable = true
+  AND NOT sibling.chunk_id IN $chunk_ids
+  AND ($standard_id IS NULL OR sibling.standard_id = $standard_id)
+  AND ($zone IS NULL OR sibling.zone = $zone)
+RETURN DISTINCT
+  sibling.chunk_id AS chunk_id,
+  sibling.text AS text,
+  sibling.contextualized_text AS contextualized_text,
+  sibling.citation_label AS citation_label,
+  sibling.standard_id AS standard_id,
+  sibling.zone AS zone,
+  sibling.chunk_type AS chunk_type,
+  sibling.pdf_page_start AS pdf_page_start,
+  sibling.pdf_page_end AS pdf_page_end
+LIMIT $limit
+"""
 
 
-def build_rerank_candidates(
-    seeds: Sequence[Mapping[str, Any]],
-    graph_evidence: Sequence[Mapping[str, Any]],
-    *,
-    standard_id: str | None = None,
-    zone: str | None = None,
-) -> list[dict[str, Any]]:
-    """Combine hybrid seeds and textual graph evidence without candidate ID collisions."""
-    normalized_standard = normalize_standard_id(standard_id)
-    candidates: list[dict[str, Any]] = []
-    seen: set[str] = set()
+@dataclass(frozen=True)
+class RetrievalConfig:
+    """How many chunks reach the answer generator."""
 
-    for seed in seeds:
-        candidate = dict(seed)
-        chunk_id = str(candidate.get("chunk_id") or "").strip()
-        if not chunk_id or chunk_id in seen:
-            continue
-        candidate["chunk_id"] = chunk_id
-        candidate["candidate_source"] = "hybrid"
-        candidates.append(candidate)
-        seen.add(chunk_id)
+    top_k: int = 12
+    max_siblings: int = 8
 
-    for evidence in graph_evidence:
-        candidate = _graph_candidate(evidence)
-        if candidate is None:
-            continue
-        if normalized_standard is not None and str(candidate.get("standard_id")) != normalized_standard:
-            continue
-        if zone is not None and candidate.get("zone") != zone:
-            continue
-        if candidate["chunk_id"] in seen:
-            continue
-        candidates.append(candidate)
-        seen.add(candidate["chunk_id"])
-    return candidates
+    def __post_init__(self) -> None:
+        if self.top_k <= 0:
+            raise ValueError("top_k must be greater than zero")
+        if self.max_siblings < 0:
+            raise ValueError("max_siblings must not be negative")
+
+    @classmethod
+    def from_yaml(cls, path: str | Path) -> "RetrievalConfig":
+        values = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+        section = values.get("retrieval", {}) or {}
+        defaults = cls()
+        return cls(
+            top_k=int(section.get("top_k", defaults.top_k)),
+            max_siblings=int(section.get("max_siblings", defaults.max_siblings)),
+        )
 
 
 class RetrievalPipeline:
-    """Run Hybrid seed retrieval, bounded graph expansion, and OpenAI reranking."""
+    """Hybrid search, then complete any paragraph that was split across chunks."""
 
-    def __init__(self, hybrid_retriever: Any, graph_expander: Any, reranker: Any) -> None:
+    def __init__(self, hybrid_retriever: Any, driver: Any, *, database: str | None = None,
+                 config: RetrievalConfig | None = None) -> None:
         self.hybrid_retriever = hybrid_retriever
-        self.graph_expander = graph_expander
-        self.reranker = reranker
+        self.driver = driver
+        self.database = database
+        self.config = config or RetrievalConfig()
 
-    def retrieve(
-        self,
-        question: str,
-        *,
-        standard_id: str | None = None,
-        zone: str | None = None,
-        top_k: int | None = None,
-    ) -> dict[str, Any]:
+    def _siblings(self, chunk_ids: Sequence[str], standard_id: str | None,
+                  zone: str | None) -> list[dict[str, Any]]:
+        if not chunk_ids or self.config.max_siblings <= 0:
+            return []
+        with self.driver.session(database=self.database) as session:
+            rows = session.run(
+                _SIBLING_QUERY,
+                chunk_ids=list(chunk_ids),
+                standard_id=standard_id,
+                zone=zone,
+                limit=self.config.max_siblings,
+            )
+            return [dict(row) for row in rows]
+
+    def retrieve(self, question: str, *, standard_id: str | None = None,
+                 zone: str | None = None, top_k: int | None = None) -> dict[str, Any]:
         question = question.strip()
         if not question:
             raise ValueError("question must not be empty")
         normalized_standard = normalize_standard_id(standard_id)
+        limit = top_k if top_k and top_k > 0 else self.config.top_k
 
         seeds = self.hybrid_retriever.search(
             question, standard_id=normalized_standard, zone=zone
-        )
-        graph_evidence = self.graph_expander.expand(question, seeds)
-        candidates = build_rerank_candidates(
-            seeds,
-            graph_evidence,
-            standard_id=normalized_standard,
-            zone=zone,
-        )
-        results = self.reranker.rerank(question, candidates, top_k=top_k)
+        )[:limit]
+        results: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for seed in seeds:
+            chunk_id = str(seed.get("chunk_id") or "").strip()
+            if not chunk_id or chunk_id in seen:
+                continue
+            candidate = dict(seed)
+            candidate["chunk_id"] = chunk_id
+            candidate["candidate_source"] = "hybrid"
+            results.append(candidate)
+            seen.add(chunk_id)
+
+        siblings: list[dict[str, Any]] = []
+        for row in self._siblings(list(seen), normalized_standard, zone):
+            chunk_id = str(row.get("chunk_id") or "").strip()
+            if not chunk_id or chunk_id in seen:
+                continue
+            row["chunk_id"] = chunk_id
+            row["candidate_source"] = "sibling"
+            siblings.append(row)
+            seen.add(chunk_id)
+
+        results.extend(siblings)
         return {
             "question": question,
             "filters": {"standard_id": normalized_standard, "zone": zone},
             "seed_count": len(seeds),
-            "graph_evidence_count": len(graph_evidence),
-            "candidate_count": len(candidates),
+            "sibling_count": len(siblings),
             "result_count": len(results),
             "results": results,
         }

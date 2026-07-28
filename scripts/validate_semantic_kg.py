@@ -12,7 +12,6 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from accounting_rag.graph.loader import read_jsonl  # noqa: E402
-from accounting_rag.retrieval.graph_expansion import GraphExpander, GraphExpansionConfig  # noqa: E402
 
 
 def main() -> None:
@@ -56,26 +55,11 @@ def main() -> None:
                 "CALL db.index.fulltext.queryNodes('concept_fulltext', '기대신용손실', {limit: 5}) "
                 "YIELD node RETURN node.canonical_name AS name"
             ).data()
-        expansion = GraphExpander(
-            driver,
-            database=os.environ["NEO4J_DATABASE"],
-            config=GraphExpansionConfig.from_yaml(PROJECT_ROOT / "config" / "retrieval.yaml"),
-        ).expand(
-            "기대신용손실이란 무엇인가?",
-            [{"chunk_id": "KIFRS1109-B5.5.28-C01", "rrf_score": 0.02}],
-        )
     finally:
         driver.close()
 
     expected = {"concepts": len(concepts), "mentions": len(mentions),
                 "definitions": expected_definitions}
-    definition_evidence = [
-        row for row in expansion
-        if row["node_id"] == "KIFRS1109-T-0014"
-        and any([edge["edge_type"] for edge in path][-2:] == ["MENTIONS", "MENTIONS"]
-                for path in row["paths"])
-    ]
-    bridge_leaks = [row["node_id"] for row in expansion if "Concept" in row["node_labels"]]
     valid = (
         counts == expected
         and invalid_edges == 0
@@ -83,8 +67,6 @@ def main() -> None:
         and bool(ecl_paths)
         and index is not None and index["state"] == "ONLINE"
         and any(row["name"] == "기대신용손실" for row in probe)
-        and bool(definition_evidence)
-        and not bridge_leaks
     )
     report = {
         "valid": valid,
@@ -95,8 +77,6 @@ def main() -> None:
         "concept_fulltext_state": index["state"] if index else None,
         "ecl_probe": probe,
         "ecl_definition_paths": ecl_paths,
-        "graph_expansion_definition_evidence": [row["node_id"] for row in definition_evidence],
-        "graph_expansion_bridge_leaks": bridge_leaks,
     }
     print(json.dumps(report, ensure_ascii=False, indent=2))
     if not valid:

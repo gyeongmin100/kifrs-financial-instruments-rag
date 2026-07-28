@@ -3,8 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import logging
+from pathlib import Path
 import re
 from typing import Any, Mapping, Sequence
+
+import yaml
 
 
 logger = logging.getLogger(__name__)
@@ -12,7 +15,9 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class AnswerConfig:
-    max_candidates: int = 10
+    # 검색이 돌려주는 최대 개수(top_k + max_siblings)보다 크게 잡는다. 이 값이 더 작으면
+    # 뒤에 붙는 형제 청크가 잘려 나가 문단 복원이 무의미해진다.
+    max_candidates: int = 20
     max_candidate_chars: int = 1800
     max_context_chars: int = 14000
     max_question_chars: int = 2000
@@ -25,6 +30,18 @@ class AnswerConfig:
         ):
             if getattr(self, field) <= 0:
                 raise ValueError(f"{field} must be greater than zero")
+
+    @classmethod
+    def from_yaml(cls, path: str | Path) -> "AnswerConfig":
+        values = (yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}).get("answer", {})
+        defaults = cls()
+        return cls(**{
+            field: int(values.get(field, getattr(defaults, field)))
+            for field in (
+                "max_candidates", "max_candidate_chars", "max_context_chars",
+                "max_question_chars", "max_output_tokens",
+            )
+        })
 
 
 _ANSWER_SCHEMA: dict[str, Any] = {

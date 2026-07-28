@@ -1,48 +1,16 @@
 hybrid:
   dense_top_k: 20
   sparse_top_k: 20
-  seed_top_k: 10
+  seed_top_k: 12
   rrf_k: 60
   dense_weight: 1.0
   sparse_weight: 1.0
   embedding_dimensions: 3072
 
-graph:
-  # Hybrid RAG 결과를 seed로 사용한다. DERIVED_FROM은 원문 복원 단계이므로
-  # 아래 hop 수는 원문 노드에서 이웃으로 확장한 관계 수를 뜻한다.
-  default_hops: 1
-  max_hops: 2
-  max_nodes: 40
-  max_frontier: 12
-  # APPEARS_ON과 문서 전체 확산 가능성이 큰 관계는 의도적으로 제외한다.
-  edge_allowlist:
-    - REFERS_TO
-    - CONTAINS
-    - HAS_BLOCK
-    - HAS_TABLE
-    - HAS_FOOTNOTE
-    - NEXT
-    - MENTIONS
-  edge_weights:
-    REFERS_TO: 1.0
-    CONTAINS: 0.8
-    HAS_BLOCK: 0.75
-    HAS_TABLE: 0.8
-    HAS_FOOTNOTE: 0.7
-    NEXT: 0.45
-    MENTIONS: 0.95
-  second_hop:
-    # 명시적 참조, 세부 노드의 부모 복원, 또는 질문어 일치가 있을 때만 2-hop을 연다.
-    lexical_overlap_min: 1
-
-rerank:
-  top_k: 10
-  batch_size: 12
-  max_candidates: 48
-  max_candidate_chars: 1800
-  max_output_tokens: 5000
-  weights:
-    question_relevance: 0.40
-    standard_body_priority: 0.20
-    direct_evidence: 0.30
-    reference_connectivity: 0.10
+retrieval:
+  # 답변 생성기에 넘길 청크 수.
+  top_k: 12
+  # 하위항목(⑴ → ㈎ → ①)은 청킹 단계에서 이미 부모 줄기와 함께 한 청크에 담긴다.
+  # 다만 문단이 길면 여러 청크로 갈리므로(전체 문단의 약 3%), 같은 문단의 나머지 청크를
+  # 이 개수만큼 보강해 앞뒤가 잘린 채로 답변이 만들어지는 것을 막는다.
+  max_siblings: 8

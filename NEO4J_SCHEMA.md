@@ -14,6 +14,8 @@
 
 실행 가능한 설정은 [config/graph_schema.yaml](config/graph_schema.yaml), Neo4j DDL은 [db/schema.cypher](db/schema.cypher)에 있다.
 
+> **읽기 전 참고.** 이 문서가 정의하는 그래프는 전부 적재·검증되어 있지만, **질의 시점에 실제로 읽는 것은 인덱스 2개(`chunk_embedding_vector`, `chunk_fulltext`)와 관계 1종(`DERIVED_FROM`)뿐이다.** 나머지 노드·관계는 원문 추적과 향후 확장을 위한 자산이다. 현재 검색 경로는 §7과 `PROJECT_STRUCTURE.md` §2를 참고한다.
+
 ## 2. 실제 입력 데이터
 
 | 입력 | 실제 핵심 필드 | 그래프 사용처 |
@@ -128,13 +130,37 @@ Standard의 `standard_id`는 원본 값인 `1032`, `1039`, `1107`, `1109`를 그
 
 ## 7. 탐색 정책
 
+### 질의 시점에 실제로 사용하는 것
+
+**`DERIVED_FROM` 1종뿐이다.** 검색 파이프라인은 Hybrid 검색으로 얻은 `Chunk`에서 출발해, 같은 `Paragraph`를 공유하는 형제 `Chunk`만 끌어온다.
+
+```cypher
+MATCH (hit:Chunk)-[:DERIVED_FROM]->(p:Paragraph)<-[:DERIVED_FROM]-(sibling:Chunk)
+WHERE hit.chunk_id IN $chunk_ids
+  AND sibling.searchable = true
+  AND NOT sibling.chunk_id IN $chunk_ids
+LIMIT $limit
+```
+
+크기 제한 때문에 여러 청크로 갈린 문단(전체의 약 3.4%)을 다시 온전하게 만드는 것이 목적이다. 하위항목 계층(⑴ → ㈎ → ①)은 청킹 단계에서 이미 부모 줄기와 함께 한 청크에 담기므로 그래프로 복원할 필요가 없다. 자세한 근거는 `PROJECT_STRUCTURE.md` §5를 참고한다.
+
+### 사용하지 않는 관계
+
+`REFERS_TO`·`MENTIONS`·`CONTAINS`·`NEXT`·`HAS_BLOCK`·`HAS_TABLE`·`HAS_FOOTNOTE`·`APPEARS_ON`은 적재·검증되어 있지만 **현재 질의 경로에서 읽지 않는다.**
+
+이전에는 Hybrid Seed에서 허용 관계 7종을 기본 1-hop·조건부 2-hop으로 확장해 근거 40개를 만들었으나, 그 대부분이 하류 재정렬에서 탈락했고 실제로 필요했던 것은 쪼개진 문단 복원뿐이었다. 그래프 확장 모듈은 제거했다. 관계 자체는 원문 추적과 향후 확장을 위해 유지한다.
+
+### 확장 시 참고할 예산
+
+그래프 탐색을 다시 도입한다면 아래 정책이 검증된 출발점이다.
+
 | 탐색 종류 | 정책 | 이유 |
 |---|---|---|
-| 의미·참조 관계 | 기본 2-hop, 근거 부족 시 최대 3-hop | 조건·예외·참조까지 도달하되 무관한 확장을 제한 |
+| 의미·참조 관계 | 기본 2-hop, 최대 3-hop | 조건·예외·참조까지 도달하되 무관한 확장을 제한 |
 | 계층 관계 | 최대 6-hop | Section 중첩 깊이가 문서마다 달라도 Standard부터 하위 요소까지 도달 |
-| 인접 문맥 | `NEXT` 양방향 ±1 | 앞뒤 문맥은 보강하지만 긴 문서 전체로 확산하지 않음 |
+| 인접 문맥 | `NEXT` 양방향 ±1 | 앞뒤 문맥은 보강하되 문서 전체로 확산하지 않음 |
 
-의미 탐색에서는 반드시 `review_status='approved'`인 관계만 사용한다. A등급 참조도 해석 상태가 확정된 것만 적재한다. hop 수는 관계의 edge 개수이며, 계층 hop과 의미·참조 hop 예산은 별도로 계산한다.
+의미 탐색에서는 `review_status='approved'`인 관계만 사용한다. A등급 참조도 해석 상태가 확정된 것만 적재한다. hop 수는 edge 개수이며, 계층 hop과 의미·참조 hop 예산은 별도로 계산한다. `APPEARS_ON`처럼 문서 전체로 확산되는 관계는 제외해야 한다.
 
 ## 8. 인덱스
 

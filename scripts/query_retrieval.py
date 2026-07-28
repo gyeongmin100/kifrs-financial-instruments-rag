@@ -11,86 +11,67 @@ SRC = PROJECT_ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from accounting_rag.retrieval.graph_expansion import (  # noqa: E402
-    GraphExpander,
-    GraphExpansionConfig,
-)
 from accounting_rag.retrieval.hybrid import HybridConfig, HybridRetriever  # noqa: E402
-from accounting_rag.retrieval.pipeline import RetrievalPipeline  # noqa: E402
-from accounting_rag.retrieval.reranker import OpenAIReranker, RerankConfig  # noqa: E402
+from accounting_rag.retrieval.pipeline import RetrievalConfig, RetrievalPipeline  # noqa: E402
 
 
 def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(
-        description="Hybrid seed search + graph expansion + OpenAI reranking."
+        description="Hybrid seed search plus sibling completion, without answering."
     )
     parser.add_argument("question")
     parser.add_argument("--standard-id")
     parser.add_argument("--zone")
     parser.add_argument("--top-k", type=int)
+    parser.add_argument("--full-text", action="store_true", help="본문을 자르지 않고 출력한다")
     parser.add_argument(
         "--config", type=Path, default=PROJECT_ROOT / "config" / "retrieval.yaml"
     )
     args = parser.parse_args()
 
-    try:
-        from dotenv import load_dotenv
-        from neo4j import GraphDatabase
-        from openai import OpenAI
-    except ImportError as error:
-        parser.error(f"Missing dependency: {error}. Install project dependencies first.")
+    from dotenv import load_dotenv
+    from neo4j import GraphDatabase
+    from openai import OpenAI
 
     load_dotenv(PROJECT_ROOT / ".env")
-    required = (
-        "NEO4J_URI",
-        "NEO4J_USERNAME",
-        "NEO4J_PASSWORD",
-        "NEO4J_DATABASE",
-        "OPENAI_API_KEY",
-        "OPENAI_EMBEDDING_MODEL",
-        "OPENAI_RERANK_MODEL",
-    )
+    required = ("NEO4J_URI", "NEO4J_USERNAME", "NEO4J_PASSWORD", "NEO4J_DATABASE",
+                "OPENAI_API_KEY", "OPENAI_EMBEDDING_MODEL")
     missing = [name for name in required if not os.getenv(name)]
     if missing:
         parser.error(f"Missing environment variables: {', '.join(missing)}")
-    if args.top_k is not None and args.top_k <= 0:
-        parser.error("--top-k must be greater than zero")
 
     client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     driver = GraphDatabase.driver(
         os.environ["NEO4J_URI"],
         auth=(os.environ["NEO4J_USERNAME"], os.environ["NEO4J_PASSWORD"]),
     )
-    config_path = args.config.resolve()
     try:
-        pipeline = RetrievalPipeline(
+        result = RetrievalPipeline(
             HybridRetriever(
-                driver,
-                client,
+                driver, client,
                 database=os.environ["NEO4J_DATABASE"],
                 embedding_model=os.environ["OPENAI_EMBEDDING_MODEL"],
-                config=HybridConfig.from_yaml(config_path),
+                config=HybridConfig.from_yaml(args.config),
             ),
-            GraphExpander(
-                driver,
-                database=os.environ["NEO4J_DATABASE"],
-                config=GraphExpansionConfig.from_yaml(config_path),
-            ),
-            OpenAIReranker(
-                client,
-                model=os.environ["OPENAI_RERANK_MODEL"],
-                config=RerankConfig.from_yaml(config_path),
-            ),
-        )
-        output = pipeline.retrieve(
-            args.question,
-            standard_id=args.standard_id,
-            zone=args.zone,
-            top_k=args.top_k,
+            driver,
+            database=os.environ["NEO4J_DATABASE"],
+            config=RetrievalConfig.from_yaml(args.config),
+        ).retrieve(
+            args.question, standard_id=args.standard_id,
+            zone=args.zone, top_k=args.top_k,
         )
     finally:
         driver.close()
-    print(json.dumps(output, ensure_ascii=False, indent=2))
+
+    if not args.full_text:
+        for item in result["results"]:
+            for key in ("text", "contextualized_text"):
+                value = item.get(key)
+                if isinstance(value, str) and len(value) > 200:
+                    item[key] = value[:200] + "…"
+    print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

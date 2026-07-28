@@ -149,7 +149,7 @@
 <main>
   <header class="hero">
     <div class="eyebrow">K-IFRS 금융상품 질의응답 시스템</div>
-    <h1>Hybrid RAG + GraphRAG 전체 프로젝트 Workflow</h1>
+    <h1>K-IFRS 금융상품 QA 전체 프로젝트 Workflow</h1>
     <p class="sub">1032·1039·1107·1109호를 근거로 일반 질문·기준서 해석·비교·계산·시험형 질문에 답하고, 결론·판단 과정·근거 문단을 제시하는 최종제품 수준의 프로젝트입니다.</p>
     <div class="summary-grid" aria-label="현재 프로젝트 요약">
       <div class="metric"><strong>4개</strong><span>대상 회계기준서</span></div>
@@ -163,7 +163,7 @@
 
   <section class="panel">
     <h2>지금 어디까지 왔나?</h2>
-    <p><span class="badge done">✓ 완료</span> 네 기준서 구조화부터 검색용 질문 분석, Hybrid → Graph → 재정렬, 충분성 검사·1회 재검색, 단일 답변 생성, 인용 검증과 FastAPI까지 구현했습니다.</p>
+    <p><span class="badge done">✓ 완료</span> 네 기준서 구조화부터 Hybrid 검색, 형제 청크 보강, 단일 답변 생성과 FastAPI까지 구현했습니다. 2026-07-29에 질문 분석·그래프 확장·재정렬·충분성 검사·인용 검증 모듈을 제거해 파이프라인을 3단계로 단순화했습니다. 기각률이 높고 결과가 실행마다 달라지는 문제 때문이며, 상세 근거는 아래 7절에 있습니다.</p>
     <p><span class="badge done">✓ 현재 상태</span> 백엔드 API와 <strong>질문·답변·원문·PDF·그래프 경로 UI</strong> 구현 및 실제 질의 검증을 완료했습니다.</p>
   </section>
 
@@ -205,7 +205,7 @@
       <button class="phase-button" data-phase="2" aria-selected="false"><span class="phase-no">2단계</span><span class="phase-name">전체 문서 구조화</span><span class="phase-note">4개 기준서 정제·청킹</span><span class="badge done phase-status">청킹 완료</span></button>
       <button class="phase-button" data-phase="3" aria-selected="false"><span class="phase-no">3단계</span><span class="phase-name">Neo4j 그래프</span><span class="phase-note">구조·참조 적재 완료</span><span class="badge done phase-status">구조 적재 완료</span></button>
       <button class="phase-button" data-phase="4" aria-selected="false"><span class="phase-no">4단계</span><span class="phase-name">Hybrid RAG</span><span class="phase-note">Dense+CJK Sparse+RRF</span><span class="badge done phase-status">검색 핵심 완료</span></button>
-      <button class="phase-button" data-phase="5" aria-selected="false"><span class="phase-no">5단계</span><span class="phase-name">GraphRAG</span><span class="phase-note">그래프 확장·재정렬</span><span class="badge done phase-status">완료</span></button>
+      <button class="phase-button" data-phase="5" aria-selected="false"><span class="phase-no">5단계</span><span class="phase-name">GraphRAG</span><span class="phase-note">구현 후 제거</span><span class="badge done phase-status">완료</span></button>
       <button class="phase-button" data-phase="6" aria-selected="false"><span class="phase-no">6단계</span><span class="phase-name">답변 시스템</span><span class="phase-note">근거·계산·인용 생성</span><span class="badge done phase-status">완료</span></button>
       <button class="phase-button" data-phase="7" aria-selected="false"><span class="phase-no">7단계</span><span class="phase-name">사용자 검수 지원</span><span class="phase-note">수동 평가용 근거·로그</span><span class="badge done phase-status">범위 확정</span></button>
       <button class="phase-button" data-phase="8" aria-selected="false"><span class="phase-no">8단계</span><span class="phase-name">제품 UI·API</span><span class="phase-note">API·UI 실제 검증</span><span class="badge done phase-status">완료</span></button>
@@ -279,7 +279,7 @@
     <section class="phase-detail hidden" data-detail="4">
       <div class="phase-header"><div><h2>4. Hybrid RAG 구현</h2><p class="goal">목표: Dense와 Sparse 검색을 RRF로 결합해 그래프 탐색을 시작할 신뢰 가능한 Seed 문단을 찾는다.</p></div><span class="badge done">✓ 검색 핵심 완료</span></div>
       <div class="table-wrap"><table><thead><tr><th>ID</th><th>상태</th><th>작업</th><th>담당</th><th>완료 기준</th></tr></thead><tbody>
-        <tr><td>S4-01</td><td><span class="badge done">✓ 설정 확정</span></td><td>.env에서 OpenAI 답변·임베딩·재정렬 모델과 Neo4j 접속정보 분리</td><td>공동</td><td>OPENAI_CHAT_MODEL, OPENAI_EMBEDDING_MODEL, OPENAI_RERANK_MODEL과 Neo4j 변수 존재</td></tr>
+        <tr><td>S4-01</td><td><span class="badge done">✓ 설정 확정</span></td><td>.env에서 OpenAI 답변·임베딩 모델과 Neo4j 접속정보 분리</td><td>공동</td><td>OPENAI_CHAT_MODEL, OPENAI_EMBEDDING_MODEL과 Neo4j 변수 존재 (OPENAI_RERANK_MODEL은 재정렬 제거로 폐지)</td></tr>
         <tr><td>S4-02</td><td><span class="badge done">✓ 완료</span></td><td>CJK analyzer 기반 한국어 Sparse 검색 구축</td><td>Codex</td><td>chunk_fulltext에서 한국어 용어와 문단 문맥 회수</td></tr>
         <tr><td>S4-03</td><td><span class="badge done">✓ 완료</span></td><td>text-embedding-3-large 3,072차원 벡터 검색 구축</td><td>Codex</td><td>4,144개 Chunk.embedding 적재 및 chunk_embedding_vector ONLINE</td></tr>
         <tr><td>S4-04</td><td><span class="badge done">✓ 완료</span></td><td>Dense 상위 20개와 Sparse 상위 20개를 weighted RRF로 결합하고 초기 Seed 상위 10개 선정</td><td>Codex</td><td>원점수·순위·유입 채널과 RRF 점수 보존</td></tr>
@@ -291,31 +291,31 @@
     </section>
 
     <section class="phase-detail hidden" data-detail="5">
-      <div class="phase-header"><div><h2>5. GraphRAG·재정렬 구현</h2><p class="goal">목표: Hybrid Seed에서 구조·참조 관계를 제한적으로 확장하고, 통합 근거 후보를 OpenAI 모델로 재정렬한다.</p></div><span class="badge done">✓ 완료</span></div>
+      <div class="phase-header"><div><h2>5. GraphRAG·재정렬 구현 (이후 제거)</h2><p class="goal">목표였던 것: Hybrid Seed에서 구조·참조 관계를 제한적으로 확장하고, 통합 근거 후보를 OpenAI 모델로 재정렬한다. 구현·검증까지 마쳤으나 2026-07-29에 제거했다.</p></div><span class="badge done">✓ 완료</span></div>
       <div class="table-wrap"><table><thead><tr><th>ID</th><th>상태</th><th>작업</th><th>담당</th><th>완료 기준</th></tr></thead><tbody>
         <tr><td>S5-01</td><td><span class="badge done">✓ 완료</span></td><td>Hybrid 상위 Chunk를 DERIVED_FROM 원문 Paragraph/Subparagraph로 변환하여 Graph Seed 생성</td><td>Codex</td><td>검색용 이동을 의미 hop에서 제외하고 원문 노드에서 탐색 시작</td></tr>
         <tr><td>S5-02</td><td><span class="badge done">✓ 완료</span></td><td>별도 엔터티 직접 연결에 의존하지 않고 Hybrid Seed를 항상 그래프 시작점으로 사용</td><td>Codex</td><td>자연어와 노드 이름이 달라도 Hybrid 경로가 유지됨</td></tr>
         <tr><td>S5-03</td><td><span class="badge done">✓ 완료</span></td><td>허용 관계만 기본 1-hop, 명시적 참조·세부노드 부모 복원·질문어 일치 시 최대 2-hop 탐색</td><td>Codex</td><td>결과 최대 40개·2-hop frontier 최대 12개·방문 집합으로 그래프 폭발 방지</td></tr>
         <tr><td>S5-04</td><td><span class="badge done">✓ 완료</span></td><td>Hybrid와 Graph 근거 후보를 통합·중복 제거하고 Seed, 관계, hop, 전체 경로와 provenance 보존</td><td>Codex</td><td>최종 후보에서 원문과 검색 경로를 역추적 가능</td></tr>
         <tr><td>S5-05</td><td><span class="badge done">✓ 선택 사항</span></td><td>복합 질문의 추가 다단계 분해</td><td>향후 선택</td><td>현재 질문 분석·보완 검색으로 최종 범위를 확정</td></tr>
-        <tr><td>S5-06</td><td><span class="badge done">✓ 완료</span></td><td>OPENAI_RERANK_MODEL과 Responses JSON Schema Structured Output으로 후보를 평가해 기본 상위 10개 선택</td><td>Codex</td><td>관련성 40%·본문 우선도 20%·직접 근거성 30%·참조 연결성 10%와 선택 이유 보존</td></tr>
+        <tr><td>S5-06</td><td><span class="badge done">✓ 제거</span></td><td>당시: OPENAI_RERANK_MODEL과 Responses JSON Schema Structured Output으로 후보를 평가해 상위 10개 선택. 점수 변동성 때문에 제거</td><td>Codex</td><td>관련성 40%·본문 우선도 20%·직접 근거성 30%·참조 연결성 10%와 선택 이유 보존</td></tr>
         <tr><td>S5-07</td><td><span class="badge done">✓ fallback 완료</span></td><td>API·응답 검증 실패 시 입력 후보 순서를 유지하는 결정적 fallback</td><td>Codex</td><td>외부 호출 실패가 전체 질의 실패로 이어지지 않음. 운영 비용·시간 로그는 제품 단계에서 추가</td></tr>
       </tbody></table></div>
-      <p class="note"><strong>실제 통합 검증:</strong> Hybrid Seed 10개 → 그래프 근거 40개 → 중복 제거된 재정렬 후보 15개 → 결과 10개를 반환했습니다. 재정렬 후 B5.5.51·B5.5.52 등 질문에 직접 적용되는 기대신용손실 지침이 최상위로 올라왔습니다. 구현 파일은 <code>graph_expansion.py</code>, <code>reranker.py</code>, <code>pipeline.py</code>, <code>scripts/query_retrieval.py</code>입니다.</p>
+      <p class="note"><strong>당시 통합 검증:</strong> Hybrid Seed 10개 → 그래프 근거 40개 → 중복 제거된 재정렬 후보 15개 → 결과 10개를 반환했습니다. <strong>제거 사유:</strong> 확장한 근거 40개의 대부분이 재정렬에서 탈락했고, 실제로 필요했던 것은 크기 때문에 쪼개진 문단을 다시 잇는 일 하나였습니다. 그 하나는 <code>DERIVED_FROM</code> 형제 조회 4줄로 대체했습니다. 재정렬은 <code>temperature</code> 미설정으로 점수가 실행마다 흔들려 하류 판정을 불안정하게 만든 원인이기도 했습니다. <code>graph_expansion.py</code>와 <code>reranker.py</code>는 삭제했고 <code>pipeline.py</code>는 형제 보강 전용으로 재작성했습니다.</p>
     </section>
 
     <section class="phase-detail hidden" data-detail="6">
-      <div class="phase-header"><div><h2>6. 근거 기반 답변 시스템</h2><p class="goal">목표: 답변 전 근거 충분성과 답변 후 인용 타당성을 분리해 검사하고, 결론·판단 과정·근거만 명확히 제시한다.</p></div><span class="badge done">✓ 완료</span></div>
+      <div class="phase-header"><div><h2>6. 근거 기반 답변 시스템</h2><p class="goal">목표: 근거 없는 단정을 막고 결론·판단 과정·근거만 명확히 제시한다. 초기에는 답변 전 충분성 검사와 답변 후 인용 검증을 분리했으나, 현재는 답변 생성기가 자체 거절하고 출력 직후 결정적으로 검증한다.</p></div><span class="badge done">✓ 완료</span></div>
       <div class="table-wrap"><table><thead><tr><th>ID</th><th>상태</th><th>작업</th><th>담당</th><th>완료 기준</th></tr></thead><tbody>
-        <tr><td>S6-01</td><td><span class="badge done">✓ 완료</span></td><td>검색에 필요한 기준서·문단번호·개념·하위 질문을 strict Structured Output으로 분석</td><td>Codex</td><td>답변 유형을 분류하지 않고 명시 조건을 보존하며 실패 시 원문 검색 fallback</td></tr>
+        <tr><td>S6-01</td><td><span class="badge done">✓ 제거</span></td><td>당시: 기준서·문단번호·개념·하위 질문을 strict Structured Output으로 분석. 질문 원문을 그대로 검색하는 것으로 단순화</td><td>Codex</td><td>답변 유형을 분류하지 않고 명시 조건을 보존하며 실패 시 원문 검색 fallback</td></tr>
         <tr><td>S6-02</td><td><span class="badge done">✓ 단일화</span></td><td>객관식·주관식·계산형 전용 라우팅 없이 모든 요청을 일반 답변 생성기로 처리</td><td>Codex</td><td>사용자 질문 원문에 맞춰 결론·판단 과정·근거를 생성하고 동일한 인용 검증 적용</td></tr>
-        <tr><td>S6-04</td><td><span class="badge done">✓ 완료</span></td><td>답변 전 결정적 조건과 OpenAI 의미 판단을 결합한 충분성 검사</td><td>Codex</td><td>claim coverage·supported evidence·missing aspects·confidence 저장</td></tr>
-        <tr><td>S6-05</td><td><span class="badge done">✓ 완료</span></td><td>근거 부족 시 missing_aspects만 확장해 최대 1회 재검색</td><td>Codex</td><td>무한 반복 없이 계속 부족하면 insufficient 반환</td></tr>
-        <tr><td>S6-06</td><td><span class="badge done">✓ 완료</span></td><td>답변 생성 후 evidence ID, citation, 실제 후보와 문장별 인용 무결성 검증</td><td>Codex</td><td>근거 밖 주장과 존재하지 않는 문단 인용 차단</td></tr>
+        <tr><td>S6-04</td><td><span class="badge done">✓ 제거</span></td><td>당시: 답변 전 결정적 조건과 OpenAI 의미 판단을 결합한 충분성 검사. 완전성 기준이 정상 질문을 기각해 제거</td><td>Codex</td><td>claim coverage·supported evidence·missing aspects·confidence 저장</td></tr>
+        <tr><td>S6-05</td><td><span class="badge done">✓ 제거</span></td><td>당시: 근거 부족 시 missing_aspects만 확장해 최대 1회 재검색. 충분성 검사와 함께 제거</td><td>Codex</td><td>무한 반복 없이 계속 부족하면 insufficient 반환</td></tr>
+        <tr><td>S6-06</td><td><span class="badge done">✓ 이동</span></td><td>evidence ID, citation, 문장별 인용 무결성 검증. 별도 모듈(citation_verifier.py)을 없애고 생성 직후 _validate_answer()로 이동</td><td>Codex</td><td>존재하지 않는 근거 ID·불일치 citation·인용 없는 단정 차단</td></tr>
         <tr><td>S6-07</td><td><span class="badge done">✓ 완료</span></td><td>일반 답변을 결론 / 판단 과정 / 근거로 구성하고 검증된 인용만 포함</td><td>Codex</td><td>모든 주요 사실 주장에 실제 기준서 근거 연결</td></tr>
         <tr><td>S6-08</td><td><span class="badge done">✓ 완료</span></td><td>OpenAI API·구조화 출력 실패의 보수적 fallback</td><td>Codex</td><td>실패가 조용히 잘못된 답변으로 변하지 않음</td></tr>
       </tbody></table></div>
-      <p class="note"><strong>실제 전체 질의 검증:</strong> 기대신용손실(ECL) 질문에서 충분성 confidence <strong>0.98</strong>, 검증된 인용 <strong>4개</strong>로 <code>answered</code> 결과를 확인했습니다. 질문 분석·검색·충분성·답변·인용 검증·UI를 포함한 전체 테스트는 123개를 통과했습니다.</p>
+      <p class="note"><strong>현재 검증 방식:</strong> <code>generation/answer.py</code>의 <code>_validate_answer()</code>가 모델 출력을 받자마자 ① evidence_id 존재 ② citation 정확 일치 ③ 문장별 인용 ④ 인용 집합 == 근거 집합을 검사하고, 하나라도 어긋나면 생성 답변을 버리고 <code>근거 부족: 검증된 답변을 생성하지 못했습니다.</code>를 반환합니다. 별도 <code>citation_verifier.py</code>는 제거했고 검증은 생성 직후로 옮겼습니다. 결론이 <code>근거 부족:</code> 또는 <code>답변 불가:</code>로 시작하면 인용 없이 통과해 모델의 자체 거절 경로가 열립니다.</p>
     </section>
 
     <section class="phase-detail hidden" data-detail="7">
@@ -333,8 +333,8 @@
         <tr><td>S8-01</td><td><span class="badge done">✓ 완료</span></td><td>FastAPI <code>/health</code>, <code>/v1/ask</code>와 요청·응답·오류 스키마 구현</td><td>Codex</td><td>질문부터 검증된 답변과 선택적 debug 진단까지 API 제공</td></tr>
         <tr><td>S8-02</td><td><span class="badge done">✓ 완료</span></td><td>질문 입력과 답변·로딩·오류 화면</td><td>Codex</td><td>진행 상태와 실패 상태가 명확함</td></tr>
         <tr><td>S8-03</td><td><span class="badge done">✓ 완료</span></td><td>근거 문단·기준서·문단번호·PDF 페이지 패널</td><td>Codex</td><td>사용자가 답을 원문과 즉시 대조 가능</td></tr>
-        <tr><td>S8-04</td><td><span class="badge done">✓ 완료</span></td><td>API의 Hybrid → Graph, 충분성 검사·재검색 진단을 UI 상태로 표시</td><td>Codex</td><td>사용자가 검색 모드를 고르지 않아도 일관된 최종 경로와 상태 확인</td></tr>
-        <tr><td>S8-05</td><td><span class="badge done">✓ 완료</span></td><td>그래프 탐색 hop과 관계 경로 표시</td><td>Codex</td><td>근거 카드에서 GraphRAG 출처와 연결 관계 확인</td></tr>
+        <tr><td>S8-04</td><td><span class="badge done">✓ 완료</span></td><td>API 진단(seed 수·형제 보강 수·status·reason)을 UI 상태로 표시</td><td>Codex</td><td>사용자가 검색 모드를 고르지 않아도 일관된 최종 경로와 상태 확인</td></tr>
+        <tr><td>S8-05</td><td><span class="badge done">✓ 완료</span></td><td>근거 출처 표시 (hybrid / sibling)</td><td>Codex</td><td>근거 카드에서 검색 유입 경로와 PDF 페이지 확인</td></tr>
         <tr><td>S8-06</td><td><span class="badge done">✓ 범위 제외</span></td><td>시간·토큰·오류 관찰 화면</td><td>향후 운영</td><td>로컬 포트폴리오 범위에는 포함하지 않음</td></tr>
         <tr><td>S8-07</td><td><span class="badge done">✓ 범위 제외</span></td><td>질문/답변 피드백과 관찰 로그</td><td>향후 운영</td><td>민감정보 저장 기능을 현재 제품에 추가하지 않음</td></tr>
       </tbody></table></div>
@@ -721,8 +721,8 @@ Concept는 탐색을 잇는 중간 노드이며 최종 인용 근거로 제시�
 검증 예외: 시작·끝 번호가 없으면 자동 생성하지 않고 unresolved 목록에 기록</pre>
 
     <div class="rule-grid">
-      <div class="rule-box"><h3>A등급 - 확정 관계</h3><ul><li>기준서·문단번호 직접 언급</li><li>구조에서 확실한 소속 관계</li><li>프로그램으로 자동 생성</li><li>기본 GraphRAG에서 사용</li></ul></div>
-      <div class="rule-box"><h3>B등급 - 검증된 의미 관계</h3><ul><li>같은 핵심 개념</li><li>임베딩 유사도와 LLM 판단</li><li>근거 문구가 실제 원문에 존재</li><li>검증 후 GraphRAG에서 사용</li></ul></div>
+      <div class="rule-box"><h3>A등급 - 확정 관계</h3><ul><li>기준서·문단번호 직접 언급</li><li>구조에서 확실한 소속 관계</li><li>프로그램으로 자동 생성</li><li>원문 추적에 사용 (현재 질의 경로는 DERIVED_FROM만 읽음)</li></ul></div>
+      <div class="rule-box"><h3>B등급 - 검증된 의미 관계</h3><ul><li>같은 핵심 개념</li><li>임베딩 유사도와 LLM 판단</li><li>근거 문구가 실제 원문에 존재</li><li>현재 적재된 B등급 노드·관계는 없음</li></ul></div>
       <div class="rule-box"><h3>C등급 - 후보 관계</h3><ul><li>관련 가능성은 있으나 근거 부족</li><li>검토 목록으로 저장</li><li>기본 답변 검색에서는 제외</li><li>사람 승인 후 B등급 승격</li></ul></div>
       <div class="rule-box"><h3>외부 기준서 참조</h3><ul><li>현재 4개 외 기준서도 참조 자체는 보존</li><li><code>ExternalStandard</code> 노드 생성</li><li>내용 미적재 상태 표시</li><li>나중에 기준서 추가 시 실제 문단과 연결</li></ul></div>
     </div>
@@ -731,80 +731,93 @@ Concept는 탐색을 잇는 중간 노드이며 최종 인용 근거로 제시�
   </section>
 
   <section class="panel design-section" id="retrieval-flow">
-    <h2>7. 확정된 Hybrid → Graph 직렬 검색 흐름</h2>
+    <h2>7. 현재 검색·답변 흐름</h2>
+    <p class="note"><strong>2026-07-29 단순화.</strong> 단계 3개, OpenAI 호출 2회(임베딩 1 + 생성 1), 거절 게이트 0개입니다.</p>
     <pre class="ascii">사용자 질문
     |
-    |-- 질문 목적·하위 질문·기준서·문단번호·회계 개념 후보 추출
+    |-- (1) Hybrid 검색                       retrieval/hybrid.py
+    |   |-- 질문 임베딩: text-embedding-3-large 3,072차원
+    |   |-- Dense : chunk_embedding_vector 상위 20
+    |   |-- Sparse: chunk_fulltext(cjk) 상위 20
+    |   `-- weighted RRF 결합 -> 상위 12
+    |       rrf_score += weight / (rrf_k + rank),  rrf_k = 60
     |
-    |-- Hybrid 검색
-    |   |-- Sparse/Full-text(cjk): 한국어 용어·문단번호
-    |   |-- Dense/Vector: 표현이 달라도 의미가 유사한 문단
-    |   `-- RRF: 서로 다른 점수 대신 두 순위를 결합
+    |-- (2) 형제 청크 보강                     retrieval/pipeline.py
+    |   `-- 같은 Paragraph에서 파생된 다른 Chunk를 최대 8개 추가
+    |       (크기 때문에 쪼개진 문단 3.4%를 다시 온전하게)
     |
-    |-- 상위 Chunk를 원문 Paragraph/Subparagraph Seed로 변환
-    |
-    |-- Graph 확장
-    |   |-- 정의·적용범위
-    |   |-- 조건·예외
-    |   |-- 본문과 부록 적용지침
-    |   |-- 적용사례
-    |   `-- 다른 기준서 참조 문단
-    |
-    |-- Seed별 근거 묶음 생성
-    |-- OpenAI 근거 묶음 재정렬
-    |-- 답변 전 근거 충분성 검사
-    |-- 부족하면 누락 부분만 최대 1회 재검색
-    |-- 답변 후 인용 검증
+    |-- (3) 답변 생성                          generation/answer.py
+    |   |-- 근거 카탈로그 구성 (E1, E2, ... / 총 14,000자 상한)
+    |   |-- OpenAI Responses strict JSON Schema
+    |   `-- 출력 즉시 결정적 검증, 실패 시 fallback
     |
     `-- 사용자 출력
         |-- 결론
         |-- 판단 과정
         `-- 근거: 기준서·문단번호·PDF 페이지</pre>
-    <p class="note"><strong>핵심:</strong> Dense와 Sparse 검색이 자연어 질문에 가까운 원문 Seed를 찾고, GraphRAG가 그 Seed에 연결된 정의·조건·예외·적용지침·사례·타 기준서를 확장합니다. Hybrid와 Graph를 독립 병렬로 실행하지 않습니다.</p>
+    <p class="note"><strong>핵심:</strong> Dense와 Sparse가 자연어 질문에 가까운 원문을 찾고, 형제 보강이 잘린 문단을 잇습니다. 답할 수 있는지는 답변 모델이 스스로 판단합니다.</p>
 
+    <h3>게이트를 제거한 이유</h3>
     <div class="rule-grid">
-      <div class="rule-box"><h3>왜 직렬 구조인가</h3><ul><li>자연어와 그래프 엔터티명이 달라도 Seed를 찾기 쉬움</li><li>관련 없는 노드에서 탐색이 시작되는 위험 감소</li><li>Neo4j HybridCypherRetriever와 같은 검색 후 그래프 확장 방식</li><li>경로와 인용을 설명하기 쉬움</li></ul></div>
-      <div class="rule-box"><h3>그래프 영향력을 유지하는 방법</h3><ul><li>직접 참조·조건·예외 관계를 필수 후보로 확장</li><li>개별 Chunk가 아닌 그래프 근거 묶음을 재정렬</li><li>선택된 전체 경로와 관계 유형 보존</li><li>근거 충분성 검사에서 누락 관계 확인</li></ul></div>
+      <div class="rule-box"><h3>원인 A. 완전성 요구</h3><ul><li>의미 판정 프롬프트가 "예외까지 전부 커버"를 요구</li><li>K-IFRS는 어떤 주제든 예외가 딸려 있음</li><li>상위 10개 청크로는 충족 불가능</li><li>정상 질문 대부분이 기각됨</li></ul></div>
+      <div class="rule-box"><h3>원인 B. 비결정성</h3><ul><li>기계 판정이 재정렬 LLM 점수에 의존</li><li>LLM 호출 5곳 모두 temperature 미설정</li><li>같은 질문이 1차 기각, 2차 정상 답변</li><li>경계선 질문이 통과와 기각을 오감</li></ul></div>
     </div>
-    <p class="note"><strong>설계 근거:</strong> Neo4j의 <a href="https://neo4j.com/docs/neo4j-graphrag-python/current/user_guide_rag.html">HybridCypherRetriever 공식 문서</a>는 벡터·전문 검색으로 유사 노드를 찾은 뒤 Cypher로 그래프를 확장합니다. Microsoft GraphRAG도 <a href="https://microsoft.github.io/graphrag/query/overview/">Local Search와 Global Search</a>를 구분하며, 전체 커뮤니티 보고서를 사용하는 Global Search는 데이터 전체를 묻는 광범위한 질문에 적합하고 비용이 큰 방식으로 설명합니다. 현재 제품은 정확한 문단·조건·예외가 필요한 지역 질의가 중심이므로 직렬 Local 확장을 기본으로 선택했습니다.</p>
-
-    <h3>관계별 hop 정책</h3>
-    <div class="table-wrap"><table><thead><tr><th>관계</th><th>기본</th><th>최대</th><th>중단 기준</th></tr></thead><tbody>
-      <tr><td>전체 허용 관계</td><td>1-hop</td><td>조건부 2-hop</td><td>결과 최대 40개, 방문 노드 재탐색 금지</td></tr>
-      <tr><td>명시적 참조</td><td>직접 대상 포함</td><td>REFERS_TO 경로는 2-hop 허용</td><td>범위 참조는 직접 Edge 사용</td></tr>
-      <tr><td>구조 관계</td><td>CONTAINS·HAS_BLOCK·HAS_TABLE·HAS_FOOTNOTE</td><td>세부 노드의 부모 복원 시 2-hop</td><td>2-hop frontier 최대 12개</td></tr>
-      <tr><td>NEXT</td><td>인접 원문 후보</td><td>질문어 일치 시 2-hop</td><td>문서 전체 연속 순회 금지</td></tr>
+    <div class="table-wrap"><table><thead><tr><th>질문</th><th>이전</th><th>현재</th></tr></thead><tbody>
+      <tr><td>금융자산 상각후원가 측정 조건</td><td>answered</td><td>answered</td></tr>
+      <tr><td>위험회피회계 적용 요건</td><td>deterministic_failed</td><td><strong>answered</strong></td></tr>
+      <tr><td>기대신용손실 (키워드 한 단어)</td><td>semantic_insufficient</td><td><strong>answered</strong></td></tr>
+      <tr><td>금융부채랑 자본 어떻게 구분해?</td><td>semantic_insufficient</td><td><strong>answered</strong></td></tr>
+      <tr><td>금융자산의 정의</td><td>&mdash;</td><td>answered</td></tr>
+      <tr><td>오늘 서울 날씨 어때?</td><td>거절</td><td><strong>거절</strong> (정상)</td></tr>
     </tbody></table></div>
-    <p class="note"><strong>hop 의미:</strong> Edge 하나를 건너가면 1-hop입니다. Chunk에서 원문으로 가는 <code>DERIVED_FROM</code> 이동은 검색 자료를 원문 노드로 바꾸는 과정이므로 의미 hop 예산에서는 제외합니다.</p>
+    <p class="note"><strong>답변 성공 2/6 → 5/6.</strong> 범위 밖 질문은 여전히 걸러집니다. 기각률이 낮아진 것이지 아무거나 답하게 된 것이 아닙니다.</p>
 
-    <h3>OpenAI 근거 묶음 재정렬</h3>
-    <pre class="ascii">입력: 최대 48개 통합 근거 후보 (실제 검증 15개)
-│
-├─ 질문 직접 관련성 40%
-├─ 기준서 권위성 20%
-├─ 직접 적용 근거성 30%
-└─ 명시적 참조·그래프 연결성 10%
+    <h3>하위항목(⑴ → ㈎ → ①) 처리</h3>
+    <p class="note">검색 시점에 그래프로 부모를 복원하지 않습니다. <strong>청킹 단계에서 이미 부모 줄기와 함께 한 청크에 담기기 때문</strong>입니다.</p>
+    <pre class="ascii">청크 KIFRS1032-11-C01 (834자, 원문 노드 17개를 덮음)
 
-출력: 기본 상위 10개 + 항목별 점수 + 선택 이유
-실패: 입력 후보 순서를 유지하는 결정적 fallback</pre>
-    <p class="note"><strong>모델:</strong> <code>OPENAI_RERANK_MODEL=gpt-5.6-terra</code>를 사용합니다. 정확한 문단 원문 조회는 재정렬을 생략할 수 있습니다.</p>
+  금융자산은 다음의 자산을 말한다.          &lt;- 부모 줄기 포함
+  ⑴ 현금
+  ⑵ 다른 기업의 지분상품
+  ⑶ 다음 중 어느 하나에 해당하는 계약상 권리
+    ㈎ 거래상대방에게서 현금 등 금융자산을 수취할 계약상 권리
+    ㈏ 잠재적으로 유리한 조건으로 ...
+  ⑷ 기업 자신의 지분상품으로 결제하거나 ...
+    ㈎ 수취할 자기지분상품의 수량이 변동 가능한 비파생상품
+    ㈏ 확정 수량의 자기지분상품을 ... 파생상품
+      ① 문단 16A와 16B에 따라 지분상품으로 분류하는 풋가능 금융상품
+      ② 발행자가 청산하는 경우에만 ...
+      ③ 자기지분상품을 미래에 수취하거나 인도하기 위한 계약인 금융상품</pre>
+    <div class="table-wrap"><table><thead><tr><th>Aura 실측 확인 항목</th><th>값</th><th>의미</th></tr></thead><tbody>
+      <tr><td>Subparagraph -CONTAINS-&gt; Subparagraph</td><td><strong>0건</strong></td><td>파서가 평탄화. 중첩 깊이는 1뿐</td></tr>
+      <tr><td>청크당 DERIVED_FROM 엣지</td><td><strong>최소 2개</strong> (최대 37)</td><td>조각만 담은 청크가 없음</td></tr>
+      <tr><td>한 문단이 청크 1개에 온전히 들어간 비율</td><td><strong>96.6%</strong> (3,701/3,831)</td><td>대부분 이미 완전함</td></tr>
+    </tbody></table></div>
+    <p class="note">남은 <strong>3.4%</strong>가 형제 보강의 존재 이유입니다. 형제까지 합쳐도 평균 1,283자, p95 3,326자, 최대 6,250자로 컨텍스트 예산 안에 들어옵니다.</p>
 
-    <h3>근거 충분성 검사</h3>
-    <pre class="ascii">답변 전
-├─ 직접 답하는 공식 본문·부록 문단이 있는가?
-├─ 복합 질문의 각 하위 질문에 근거가 있는가?
-├─ 핵심 REFERS_TO 문단이 포함됐는가?
-├─ 주요 Condition·Exception이 누락되지 않았는가?
-├─ 사례·결론도출근거만 있고 규범적 본문이 빠지지 않았는가?
-└─ 필요한 외부 기준서 원문이 실제 적재돼 있는가?
+    <h3>답변 검증 (게이트를 없앤 뒤 남은 방어선)</h3>
+    <pre class="ascii">_validate_answer()  generation/answer.py
+├─ 최상위 키가 정확히 conclusion / reasoning / evidence 셋인가
+├─ 모든 evidence_id가 제공한 카탈로그에 존재하는가
+├─ citation 문자열이 제공값과 정확히 일치하는가
+├─ evidence_id 중복이 없는가
+├─ 결론·판단과정의 모든 문장에 [E1] 인용이 있는가
+└─ 인용한 ID 집합 == 반환한 근거 ID 집합인가
 
-부족하면 missing_aspects만 최대 1회 재검색
+하나라도 어긋나면 -> _fallback()
+   conclusion = "근거 부족: 검증된 답변을 생성하지 못했습니다."
 
-답변 후
-├─ 모든 주요 주장에 실제 문단이 연결되는가?
-├─ 인용 문단이 해당 주장을 실제로 지지하는가?
-└─ 존재하지 않는 기준서·문단번호를 만들지 않았는가?</pre>
-    <p class="note"><strong>커뮤니티 요약:</strong> 현재 기본 검색에서는 사용하지 않습니다. 전체 기준서의 큰 흐름을 묻는 광범위한 질문에 나중에 추가할 수 있지만, 생성된 커뮤니티 요약 자체를 최종 회계 근거로 인용하지는 않습니다.</p>
+예외: 결론이 '근거 부족:' 또는 '답변 불가:'로 시작하면
+      인용 없이 통과 (모델의 자체 거절 경로)</pre>
+
+    <h3>상태 계약</h3>
+    <div class="table-wrap"><table><thead><tr><th>status</th><th>reason</th><th>조건</th></tr></thead><tbody>
+      <tr><td><code>answered</code></td><td><code>sufficient</code></td><td>검증 통과 + 거절 접두사 없음</td></tr>
+      <tr><td><code>insufficient</code></td><td><code>self_declined</code></td><td>모델 자체 거절 또는 검증 실패 fallback</td></tr>
+      <tr><td><code>insufficient</code></td><td><code>no_evidence_found</code></td><td>검색 결과 0건</td></tr>
+    </tbody></table></div>
+    <p class="note"><strong>프론트엔드는 이 조합으로만 화면을 고릅니다.</strong> conclusion 문자열을 파싱해 상태를 추측하지 않습니다. reason 값을 바꾸면 <code>api/schemas.py</code>와 <code>static/app.js</code>의 <code>resultKind()</code>를 함께 바꾸고, 프론트엔드를 먼저 배포해야 합니다.</p>
+
   </section>
 
   <section class="panel design-section" id="prototype-results">
@@ -858,15 +871,15 @@ Concept는 탐색을 잇는 중간 노드이며 최종 인용 근거로 제시�
     <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>PDF 페이지:</strong> 검색 대상 Chunk 4,144/4,144개에 페이지를 연결했고, 저신뢰·복수 후보는 검토 목록 287개로 분리했습니다.</span></div>
     <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>Neo4j 스키마·적재:</strong> 원문·Chunk 구조와 A등급 참조 관계 74,409개를 로컬 DB에 적재하고 인덱스·검증을 통과했습니다.</span></div>
     <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>임베딩·Hybrid 검색:</strong> 4,144개 Chunk.embedding과 Dense+CJK Sparse+weighted RRF 검색·CLI를 구현했습니다.</span></div>
-    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>Graph 확장·재정렬:</strong> Hybrid Seed에서 구조·참조 그래프를 제한적으로 확장하고 통합 후보를 OpenAI Structured Output으로 재정렬합니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 제거</span><span><strong>Graph 확장·재정렬:</strong> 구현·검증까지 마쳤으나 2026-07-29에 제거했습니다. 확장 근거 대부분이 재정렬에서 탈락했고, 재정렬 점수의 변동성이 하류 판정을 불안정하게 만들었습니다.</span></div>
     <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>질문 분석:</strong> 질문 유형을 분류하지 않고 명시된 기준서·문단을 보존하며 검색 질의·개념·하위 질문만 구조화합니다.</span></div>
-    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>충분성·재검색:</strong> 결정적 검사와 의미 검사를 통과한 근거만 사용하고, 누락 측면이 있으면 최대 1회만 보완 검색합니다.</span></div>
-    <div class="status-line"><span class="badge done">✓ 단일화</span><span><strong>답변 경로:</strong> 질문 유형 라우팅을 제거했습니다. 모든 질문은 동일한 검색·충분성 검사·일반 답변 생성·인용 검증 경로를 사용합니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 제거</span><span><strong>충분성·재검색:</strong> 완전성 기준이 정상 질문을 기각해 제거했습니다. 답할 수 있는지는 답변 생성기가 스스로 판단하고 <code>근거 부족:</code>으로 밝힙니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 단일화</span><span><strong>답변 경로:</strong> 질문 유형 라우팅이 없습니다. 모든 질문이 Hybrid 검색 → 형제 보강 → 답변 생성이라는 같은 경로를 사용합니다.</span></div>
     <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>FastAPI:</strong> <code>/health</code>와 <code>/v1/ask</code>, 요청·응답 검증과 안전한 오류 처리를 구현했습니다.</span></div>
     <div class="status-line"><span class="badge done">✓ 확인</span><span><strong>실제 질의:</strong> ECL 일반 질문과 객관식 형태 모두 단일 답변 경로에서 기준서 근거와 함께 응답했습니다.</span></div>
     <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>제품 UI:</strong> 질문·답변·원문·PDF 페이지·Hybrid/Graph 출처·hop·관계 경로와 처리 상태를 보여주는 반응형 화면을 구현했습니다.</span></div>
     <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>검색 구조:</strong> Dense+Sparse RRF로 Seed를 찾고 Neo4j 그래프를 확장하는 직렬 구조로 확정했습니다.</span></div>
-    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>재정렬:</strong> OpenAI gpt-5.6-terra가 개별 Chunk가 아닌 그래프 근거 묶음을 재정렬합니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 제거</span><span><strong>재정렬:</strong> 제거했습니다. <code>OPENAI_RERANK_MODEL</code> 환경변수도 더 이상 사용하지 않습니다.</span></div>
     <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>Graph hop:</strong> 허용 관계만 기본 1-hop, 명시적 참조·세부노드 부모 복원·질문어 일치 시 최대 2-hop이며 결과 40개·frontier 12개로 제한합니다.</span></div>
     <div class="status-line"><span class="badge done">✓ 개념 KG 완료</span><span><strong>의미 KG:</strong> 공식 정의 기반 Concept 45개와 MENTIONS 17,712개를 Neo4j에 적재했습니다. 규칙·조건·예외·사례 자동 KG는 최종 범위에서 제외했습니다.</span></div>
     <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>Neo4j 환경:</strong> 로컬에서 개발한 뒤 Aura Free로 이전했습니다. 노드 22,018개·관계 92,121개를 적재하고 검증기 3종을 통과했습니다.</span></div>
@@ -874,7 +887,7 @@ Concept는 탐색을 잇는 중간 노드이며 최종 인용 근거로 제시�
     <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>평가 범위:</strong> 자동 벤치마크와 네 방식 비교는 구현하지 않고 사용자가 직접 평가합니다.</span></div>
     <div class="callout" style="margin-top:16px">
       <h3>현재 진행 상태</h3>
-      <p>파싱·페이지 매핑·구조/참조 그래프·공식 Concept KG·임베딩·Hybrid → Graph → 재정렬·충분성·1회 재검색·단일 답변·인용 검증·FastAPI·제품 UI가 완료되었고, 무료 클라우드 배포(Aura Free + Render + Cloudflare Pages)까지 마쳤습니다. 이후 비동기 작업 API와 이미지 첨부를 추가하고, 사용하지 않는 의미 규칙 KG를 제거했습니다. 남은 한계는 정의를 직접 묻는 질문에서 부록 정의표가 본문 문단에 밀리는 검색 편향이며, 정의 영역 가산점 또는 용어 단위 재청킹으로 개선할 수 있습니다.</p>
+      <p>파싱·페이지 매핑·구조/참조 그래프·공식 Concept KG·임베딩·Hybrid 검색·단일 답변·FastAPI·제품 UI가 완료되었고, 무료 클라우드 배포(Aura Free + Render + Cloudflare Pages)까지 마쳤습니다. 이후 비동기 작업 API와 이미지 첨부를 추가하고, 사용하지 않는 의미 규칙 KG를 제거했습니다. 2026-07-29에는 기각률 60%와 실행별 결과 변동을 해결하기 위해 질문 분석·그래프 확장·재정렬·충분성 검사·별도 인용 검증(약 1,400줄)을 제거하고 파이프라인을 3단계로 줄였습니다. 남은 한계는 (1) 인용 검증이 형식만 보고 내용 일치는 확인하지 않는 점, (2) 답변이 근거 범위를 넘는지 감지할 장치가 없는 점, (3) 정의를 직접 묻는 질문에서 부록 정의표가 본문 문단에 밀리는 검색 편향, (4) 답변 생성 LLM에 temperature를 설정하지 않아 남아 있는 변동성입니다.</p>
     </div>
   </section>
 

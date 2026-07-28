@@ -1,12 +1,11 @@
-sufficiency:
-  min_candidates: 3
-  min_distinct_evidence_ids: 2
-  min_non_empty_text: 2
-  min_cited_candidates: 2
-  min_scored_candidates: 2
-  min_qualified_evidence: 2
-  min_question_relevance: 3
-  min_direct_evidence: 3
-  semantic_confidence_threshold: 0.65
-  max_evidence_chars: 1800
-  max_output_tokens: 2500
+answer:
+  # 모델에 넘길 근거 개수의 상한. retrieval.yaml의 top_k + max_siblings(=20)보다 작으면
+  # 뒤에 붙는 형제 청크가 잘려 문단 복원이 무의미해진다.
+  max_candidates: 20
+  # 근거 하나에서 잘라 쓸 최대 글자수.
+  max_candidate_chars: 1800
+  # 모든 근거를 합쳐 프롬프트에 넣을 총 글자수 상한. 실질적으로 이 값이 먼저 걸린다.
+  max_context_chars: 14000
+  # 질문 길이 상한. 초과하면 ValueError를 던진다(이미지 첨부 시 추출 텍스트가 붙는다).
+  max_question_chars: 2000
+  max_output_tokens: 3000
