@@ -42,9 +42,13 @@
 
 기본값은 `confidence=1.0`, `review_status='approved'`다. 페이지처럼 알고리즘 신뢰도가 별도로 있는 경우 실제 `page_match_confidence`를 사용한다.
 
-### B등급: OpenAI 후보
+### B등급: LLM 추론이 개입한 의미 관계
 
-`Rule`, `Condition`, `Exception`, `Example` 및 그 관계는 OpenAI Structured Output이 제안한다. 후보 생성 직후에는 `review_status='candidate'`이며 기본 검색과 답변 근거에서 제외한다. 원문 문구·출처 문단·방향을 검증해 `approved`가 된 관계만 사용한다. `Concept`는 예외적으로 공식 용어 정의에서 결정적으로 생성하는 A등급 노드다.
+LLM이 원문을 해석해 제안한 의미 관계다. 후보 생성 직후에는 `review_status='candidate'`이며 사람이 원문 문구·출처 문단·방향을 검증해 `approved`가 되기 전까지 기본 검색과 답변 근거에서 제외한다.
+
+**현재 적재된 B등급 노드·관계는 없다.** 규칙·조건·예외·사례 추출을 검토했으나 승인 절차를 운영할 계획이 없어 최종 범위에서 제외했고, 관련 정의도 스키마에서 삭제했다.
+
+`Concept`는 LLM 추론이 아니라 공식 용어 정의표에서 결정적으로 생성하므로 A등급이다.
 
 ### C등급: 미확정 후보
 
@@ -75,12 +79,8 @@ Standard의 `standard_id`는 원본 값인 `1032`, `1039`, `1107`, `1109`를 그
 | Label | 의미 |
 |---|---|
 | `Concept` | 금융자산, 기대신용손실 등 공식 정의에서 정규화한 A등급 회계 개념 |
-| `Rule` | 인식·분류·측정·제거·표시·공시 규칙 |
-| `Condition` | 규칙의 적용 조건 |
-| `Exception` | 규칙의 예외 |
-| `Example` | 규칙을 설명하는 적용사례 |
 
-의미 노드는 `extractor_model`, `extractor_version`, `review_status`를 갖는다. 현재 Concept는 제1107·1109호의 정의표, 제1032호 문단 11, 제1039호 문단 9만 원천으로 사용한다. 동일한 공식 용어만 공유 Concept로 병합하고, 원문에 명시된 alias만 저장한다.
+의미 노드는 `Concept` 하나만 사용한다. `extractor_model`, `extractor_version`, `review_status`를 갖는다. Concept는 제1107·1109호의 정의표, 제1032호 문단 11, 제1039호 문단 9만 원천으로 사용한다. 동일한 공식 용어만 공유 Concept로 병합하고, 원문에 명시된 alias만 저장한다.
 
 ## 5. 관계와 방향
 
@@ -108,13 +108,9 @@ Standard의 `standard_id`는 원본 값인 `1032`, `1039`, `1107`, `1109`를 그
 
 ```text
 (Paragraph|Block|Table)-[:MENTIONS]->(Concept)
-(Paragraph)-[:ESTABLISHES]->(Rule)
-(Rule)-[:HAS_CONDITION]->(Condition)
-(Rule)-[:HAS_EXCEPTION]->(Exception)
-(Rule)-[:APPLIES_TO]->(Concept)
-(Example)-[:ILLUSTRATES]->(Rule)
-(Paragraph)-[:EXPLAINS]->(Paragraph)
 ```
+
+`MENTIONS`는 공식 정의의 canonical name 또는 승인된 alias가 원문에 정확히 등장할 때만 만든다. 문자열 일치로 결정되므로 A등급이다.
 
 관계 방향은 의미가 읽히는 방향으로 고정한다. 예를 들어 예외가 규칙을 가리키는 것이 아니라 규칙이 예외를 가진다.
 
@@ -153,15 +149,12 @@ OpenAI `text-embedding-3-large`의 기본 차원인 3,072를 사용한다. `conf
 
 전문 검색은 한국어 복합어를 bi-gram으로 색인하는 Neo4j `cjk` 분석기를 사용한다. `standard-no-stop-words`는 한국어 질의에서 관련 없는 결과를 반환하는 것이 실제 검증되어 사용하지 않는다. 검색 결과에는 애플리케이션 쿼리에서 `searchable=true AND inactive=false`를 적용한다. Neo4j 전문 인덱스 자체는 이 조건을 강제하지 않는다.
 
-## 9. 적재 단계의 경계
-
-이번 스키마 단계에서는 제약조건과 인덱스의 정의까지만 확정한다. 실제 적재기는 다음 단계에서 구현한다.
+## 9. 적재 순서
 
 1. A등급 구조 노드와 관계를 `MERGE`로 적재한다.
 2. 해석 완료된 명시 참조만 `REFERS_TO`로 적재한다.
 3. Chunk 임베딩을 생성해 `Chunk.embedding`에 저장한다.
 4. `scripts/build_semantic_kg.py`로 공식 정의 Concept·MENTIONS JSONL을 만들고 `scripts/load_semantic_neo4j.py`로 적재한다.
 5. `scripts/validate_semantic_kg.py`로 개수·정의 출처·승인 상태·인덱스·실제 2-hop 정의 경로를 확인한다.
-6. OpenAI 규칙 의미 추출 결과는 후보 파일과 `candidate` 상태로 저장하고, 검증·승인 후에만 검색 경로에 포함한다.
 
-따라서 현재 공식 Concept·MENTIONS는 구현됐지만, 스키마가 존재한다는 사실만으로 OpenAI 기반 Rule·Condition·Exception·Example 관계까지 확정된 것은 아니다.
+적재기는 재실행해도 중복 노드·관계를 만들지 않는다. 현재 적재된 의미 데이터는 공식 정의 기반 `Concept`와 `MENTIONS`뿐이며, LLM 추론으로 만든 B등급 노드·관계는 없다.

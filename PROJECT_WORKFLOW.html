@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="ko">
 <head>
   <meta charset="utf-8">
@@ -200,7 +200,7 @@
     </div>
     <p class="sub">아래 단계 상자를 누르면 해당 섹터의 세부 작업 목록만 볼 수 있습니다.</p>
     <nav class="workflow" aria-label="프로젝트 단계">
-      <button class="phase-button" data-phase="0" aria-selected="true"><span class="phase-no">0단계</span><span class="phase-name">범위·원본 준비</span><span class="phase-note">기준서와 변환본 확보</span><span class="badge done phase-status">진행 중 일부 완료</span></button>
+      <button class="phase-button" data-phase="0" aria-selected="true"><span class="phase-no">0단계</span><span class="phase-name">범위·원본 준비</span><span class="phase-note">기준서와 변환본 확보</span><span class="badge done phase-status">완료</span></button>
       <button class="phase-button" data-phase="1" aria-selected="false"><span class="phase-no">1단계</span><span class="phase-name">파서 시제품</span><span class="phase-note">문단·표·각주 보존 검증</span><span class="badge done phase-status">완료</span></button>
       <button class="phase-button" data-phase="2" aria-selected="false"><span class="phase-no">2단계</span><span class="phase-name">전체 문서 구조화</span><span class="phase-note">4개 기준서 정제·청킹</span><span class="badge done phase-status">청킹 완료</span></button>
       <button class="phase-button" data-phase="3" aria-selected="false"><span class="phase-no">3단계</span><span class="phase-name">Neo4j 그래프</span><span class="phase-note">구조·참조 적재 완료</span><span class="badge done phase-status">구조 적재 완료</span></button>
@@ -210,7 +210,8 @@
       <button class="phase-button" data-phase="7" aria-selected="false"><span class="phase-no">7단계</span><span class="phase-name">사용자 검수 지원</span><span class="phase-note">수동 평가용 근거·로그</span><span class="badge done phase-status">범위 확정</span></button>
       <button class="phase-button" data-phase="8" aria-selected="false"><span class="phase-no">8단계</span><span class="phase-name">제품 UI·API</span><span class="phase-note">API·UI 실제 검증</span><span class="badge done phase-status">완료</span></button>
       <button class="phase-button" data-phase="9" aria-selected="false"><span class="phase-no">9단계</span><span class="phase-name">프로젝트 마무리</span><span class="phase-note">공개 범위·보안·문서화</span><span class="badge done phase-status">✓ 완료</span></button>
-      <button class="phase-button" data-phase="10" aria-selected="false"><span class="phase-no">10단계</span><span class="phase-name">무료 클라우드 배포</span><span class="phase-note">Aura·HF Spaces·Pages</span><span class="badge next phase-status">▶ 진행 중</span></button>
+      <button class="phase-button" data-phase="10" aria-selected="false"><span class="phase-no">10단계</span><span class="phase-name">무료 클라우드 배포</span><span class="phase-note">Aura·Render·Pages</span><span class="badge done phase-status">✓ 완료</span></button>
+      <button class="phase-button" data-phase="11" aria-selected="false"><span class="phase-no">11단계</span><span class="phase-name">비동기·이미지·범위 정리</span><span class="phase-note">job API·비전·KG 제거</span><span class="badge done phase-status">✓ 완료</span></button>
     </nav>
   </section>
 
@@ -253,7 +254,7 @@
         <tr><td>S2-04</td><td><span class="badge done">✓ 완료</span></td><td>표를 행 경계에서 최대 1,800자로 분할하고 가능한 경우 첫 행을 반복하며 설명 문단에 연결</td><td>Codex</td><td>362개 표에서 410개 표 Chunk 생성</td></tr>
         <tr><td>S2-05</td><td><span class="badge done">✓ 완료</span></td><td>단일·범위·복수·세부항목·타 기준서 참조 추출. 공백 유무, ~·∼·–·-·～, 쉼표, 과/와, 및, 또는, 이나와 한·BA·BCE 등 번호형식 지원</td><td>Codex</td><td>7,450개 참조의 원문, 시작·끝 번호, 실제 대상 ID와 미해결 상태 저장</td></tr>
         <tr><td>S2-06</td><td><span class="badge done">✓ 완료</span></td><td>Chunk ID, 기준서, 영역, 계층, 원문 Paragraph/Subparagraph/Block, 표·각주, 판본 해시, 검색 우선순위와 PDF 페이지 메타데이터 부여</td><td>Codex</td><td>모든 Chunk의 원문 ID 역추적 성공, 검색 대상 4,144/4,144개 페이지 보유</td></tr>
-        <tr><td>S2-07</td><td><span class="badge done">✓ 완료</span></td><td>중복·빈 Chunk·길이 제한·원문 Paragraph/Subparagraph/continuation/Table/Footnote 누락 자동 품질검사</td><td>Codex</td><td>품질보고서 생성, 독립 검증과 현재 전체 테스트 123개 통과</td></tr>
+        <tr><td>S2-07</td><td><span class="badge done">✓ 완료</span></td><td>중복·빈 Chunk·길이 제한·원문 Paragraph/Subparagraph/continuation/Table/Footnote 누락 자동 품질검사</td><td>Codex</td><td>품질보고서 생성, 독립 검증과 구현 시점 기준 전체 테스트 123개 통과(과거 실행 기록)</td></tr>
         <tr><td>S2-08</td><td><span class="badge done">✓ 완료</span></td><td>고정 샘플 및 실제 발견 참조표현 회귀 테스트</td><td>Codex</td><td>10개 자동 테스트 통과, 숫자형 문단 표현 미파싱 후보 0개</td></tr>
         <tr><td>S2-09</td><td><span class="badge done">✓ 완료</span></td><td>전체 Chunk의 PDF 페이지 매핑과 저신뢰·복수 후보 검토 목록 생성</td><td>Codex</td><td>문단 3,904/3,904, 검색 대상 문단 3,891/3,891, 검색 대상 Chunk 4,144/4,144 페이지 매핑</td></tr>
       </tbody></table></div>
@@ -286,7 +287,7 @@
         <tr><td>S4-06</td><td><span class="badge done">✓ 선택 사항</span></td><td>정확한 기준서·문단번호 직접 조회 최적화</td><td>향후 선택</td><td>현재 Hybrid 경로로도 답변 가능하므로 필수 범위에서 제외</td></tr>
         <tr><td>S4-07</td><td><span class="badge done">✓ 범위 제외</span></td><td>검색 로그와 비용·지연시간 측정</td><td>향후 운영</td><td>로컬 포트폴리오 범위에는 포함하지 않음</td></tr>
       </tbody></table></div>
-      <p class="note"><strong>구현 산출물:</strong> <code>config/embedding.json</code>, <code>config/retrieval.yaml</code>, <code>src/accounting_rag/retrieval/embeddings.py</code>, <code>src/accounting_rag/retrieval/hybrid.py</code>, <code>scripts/build_embeddings.py</code>, <code>scripts/load_embeddings_neo4j.py</code>, <code>scripts/validate_embeddings.py</code>, <code>scripts/query_hybrid.py</code>. 임베딩 cache·manifest·report를 생성했고 현재 전체 테스트 123개를 통과했습니다.</p>
+      <p class="note"><strong>구현 산출물:</strong> <code>config/embedding.json</code>, <code>config/retrieval.yaml</code>, <code>src/accounting_rag/retrieval/embeddings.py</code>, <code>src/accounting_rag/retrieval/hybrid.py</code>, <code>scripts/build_embeddings.py</code>, <code>scripts/load_embeddings_neo4j.py</code>, <code>scripts/validate_embeddings.py</code>, <code>scripts/query_hybrid.py</code>. 임베딩 cache·manifest·report를 생성했고 구현 시점 기준 전체 테스트 123개를 통과했습니다(과거 실행 기록).</p>
     </section>
 
     <section class="phase-detail hidden" data-detail="5">
@@ -355,20 +356,32 @@
     </section>
 
     <section class="phase-detail hidden" data-detail="10">
-      <div class="phase-header"><div><h2>10. 무료 클라우드 배포</h2><p class="goal">목표: 로컬 완성본을 무료 구성(Neo4j Aura Free + Hugging Face Spaces + Cloudflare Pages)으로 공개한다. 상세 절차는 <code>DEPLOYMENT.md</code> 참고.</p></div><span class="badge next">▶ 진행 중</span></div>
+      <div class="phase-header"><div><h2>10. 무료 클라우드 배포</h2><p class="goal">목표: 로컬 완성본을 무료 구성(Neo4j Aura Free + Render + Cloudflare Pages)으로 공개한다.</p></div><span class="badge done">✓ 완료</span></div>
       <div class="table-wrap"><table><thead><tr><th>ID</th><th>상태</th><th>작업</th><th>담당</th><th>완료 기준</th></tr></thead><tbody>
-        <tr><td>S10-01</td><td><span class="badge done">✓ 완료</span></td><td>배포 구성 확정: DB=Aura Free, 백엔드=HF Spaces(Docker), 프론트=Cloudflare Pages</td><td>사용자</td><td>모두 무료·카드 불필요. 30일 삭제 리스크 감수 합의</td></tr>
+        <tr><td>S10-01</td><td><span class="badge done">✓ 완료</span></td><td>배포 구성 확정: DB=Aura Free, 백엔드=Render 무료 웹 서비스(Docker), 프론트=Cloudflare Pages</td><td>사용자</td><td>전 계층 무료. Hugging Face Spaces는 Docker Space 유료화로 제외</td></tr>
         <tr><td>S10-02</td><td><span class="badge done">✓ 완료</span></td><td>백엔드 CORS 허용 목록(<code>CORS_ALLOW_ORIGINS</code>)과 IP당 시간당 요청 제한(<code>ASK_RATE_LIMIT_PER_HOUR</code>) 추가</td><td>Claude</td><td>환경변수 미설정 시 로컬 동작 불변. 스모크 테스트 통과</td></tr>
         <tr><td>S10-03</td><td><span class="badge done">✓ 완료</span></td><td>프론트 API 주소를 <code>static/config.js</code>로 분리</td><td>Claude</td><td>apiBase 빈 값이면 기존 same-origin 동작 유지</td></tr>
-        <tr><td>S10-04</td><td><span class="badge done">✓ 완료</span></td><td>HF Spaces용 <code>Dockerfile</code>과 README 메타데이터 작성</td><td>Claude</td><td>포트 7860, 환경변수는 HF Secrets 주입</td></tr>
+        <tr><td>S10-04</td><td><span class="badge done">✓ 완료</span></td><td><code>Dockerfile</code> 작성(Render <code>PORT</code> 환경변수 대응)</td><td>Claude</td><td>미설정 시 7860 기본값 사용</td></tr>
         <tr><td>S10-05</td><td><span class="badge done">✓ 완료</span></td><td><code>scripts/build_frontend_dist.py</code>로 Pages 업로드 번들 생성 자동화</td><td>Claude</td><td><code>deploy/frontend_dist/</code> 생성, 백엔드 주소 주입</td></tr>
-        <tr><td>S10-06</td><td><span class="badge done">✓ 완료</span></td><td><code>DEPLOYMENT.md</code> 배포 가이드 작성</td><td>Claude</td><td>계정 준비부터 확인까지 단계별 문서화</td></tr>
-        <tr><td>S10-07</td><td><span class="badge pending">○ 대기</span></td><td>Neo4j Aura Free 인스턴스 생성 및 데이터 적재</td><td>사용자+Claude</td><td>적재 후 <code>validate_neo4j.py</code>·<code>validate_embeddings.py</code> 통과</td></tr>
-        <tr><td>S10-08</td><td><span class="badge pending">○ 대기</span></td><td>HF Space 생성, Secrets 등록, 코드 푸시</td><td>사용자+Claude</td><td><code>/health</code> 200 응답</td></tr>
-        <tr><td>S10-09</td><td><span class="badge pending">○ 대기</span></td><td>Cloudflare Pages 번들 업로드와 CORS origin 등록</td><td>사용자+Claude</td><td>공개 주소에서 실제 질의 응답 확인</td></tr>
-        <tr><td>S10-10</td><td><span class="badge pending">○ 대기</span></td><td>GitHub 포트폴리오 저장소(공개, RAG 구현만·웹 UI 제외) 생성·푸시</td><td>사용자+Claude</td><td>원본·파생 데이터·<code>.env</code> 미포함 확인</td></tr>
+        <tr><td>S10-06</td><td><span class="badge done">✓ 완료</span></td><td>Neo4j Aura Free 인스턴스 생성 및 전체 데이터 적재</td><td>사용자+Claude</td><td>노드 22,018·관계 92,121 적재, 검증기 3종 통과, 두 인덱스 ONLINE</td></tr>
+        <tr><td>S10-07</td><td><span class="badge done">✓ 완료</span></td><td>Render 웹 서비스 생성, 환경변수 주입, 자동 배포 연결</td><td>사용자+Claude</td><td><code>/health</code> 200, 실제 질의 <code>answered</code> 확인</td></tr>
+        <tr><td>S10-08</td><td><span class="badge done">✓ 완료</span></td><td>Cloudflare Pages 번들 업로드와 CORS origin 등록</td><td>사용자+Claude</td><td>공개 주소에서 종단 질의 응답 확인, preflight 200</td></tr>
+        <tr><td>S10-09</td><td><span class="badge done">✓ 완료</span></td><td>GitHub 포트폴리오 저장소(공개, RAG 구현만·웹 UI 제외) 생성·푸시</td><td>사용자+Claude</td><td>원본·파생 데이터·<code>.env</code> 미포함 확인</td></tr>
       </tbody></table></div>
-      <p class="note"><strong>보안·비용 방침:</strong> OpenAI 키와 Neo4j 비밀번호는 HF Secrets에만 두고 저장소에는 포함하지 않습니다. 공개 API에는 IP당 시간당 10회 제한을 적용합니다. Aura Free는 3일 미사용 시 일시정지되며 로컬 데이터가 원본이므로 언제든 재적재로 복구합니다.</p>
+      <p class="note"><strong>보안·비용 방침:</strong> OpenAI 키와 Neo4j 비밀번호는 배포 플랫폼의 시크릿에만 두고 저장소에는 포함하지 않습니다. 공개 API에는 IP당 시간당 10회 제한을 적용합니다. Aura Free는 3일 미사용 시 일시정지되며 로컬 데이터가 원본이므로 언제든 재적재로 복구합니다. Render 무료 플랜은 15분 유휴 시 슬립하여 첫 요청이 지연될 수 있습니다.</p>
+    </section>
+
+    <section class="phase-detail hidden" data-detail="11">
+      <div class="phase-header"><div><h2>11. 비동기 답변·이미지 첨부와 범위 정리</h2><p class="goal">목표: 긴 응답 시간에도 결과를 잃지 않게 하고, 이미지 질문을 지원하며, 사용하지 않는 의미 KG를 제거한다.</p></div><span class="badge done">✓ 완료</span></div>
+      <div class="table-wrap"><table><thead><tr><th>ID</th><th>상태</th><th>작업</th><th>담당</th><th>완료 기준</th></tr></thead><tbody>
+        <tr><td>S11-01</td><td><span class="badge done">✓ 완료</span></td><td>비동기 작업 API: <code>POST /v1/jobs</code>, <code>GET /v1/jobs/{id}</code>, <code>DELETE /v1/jobs/{id}</code></td><td>Codex</td><td>202 즉시 반환, pending→complete 폴링, 10분 TTL 자동 정리</td></tr>
+        <tr><td>S11-02</td><td><span class="badge done">✓ 완료</span></td><td>답변 대기 중 새로고침해도 폴링 재개</td><td>Codex</td><td>sessionStorage에 진행 중 job 보관</td></tr>
+        <tr><td>S11-03</td><td><span class="badge done">✓ 완료</span></td><td>이미지 첨부(선택·드래그앤드롭·붙여넣기)와 비전 모델 텍스트 추출</td><td>Codex</td><td>최대 4장·장당 5MB, 서버에서 base64·크기 재검증, 저장하지 않음</td></tr>
+        <tr><td>S11-04</td><td><span class="badge done">✓ 완료</span></td><td>ChatGPT 형태 UI와 대화 기록 사이드바</td><td>Codex</td><td>기록은 브라우저 localStorage에만 저장(최대 30개, 텍스트만)</td></tr>
+        <tr><td>S11-05</td><td><span class="badge done">✓ 완료</span></td><td>의미 규칙 KG(Rule·Condition·Exception·Example) 구현 후 제거</td><td>Claude</td><td>후보를 생성·승인한 적이 없어 검색 영향 없음. 스키마 정의까지 삭제</td></tr>
+        <tr><td>S11-06</td><td><span class="badge done">✓ 완료</span></td><td>문서의 사실 오류 정정(LangChain 기술스택 오기, 과거 테스트 수치, 배포 플랫폼)</td><td>Claude</td><td>코드와 문서 일치 확인</td></tr>
+      </tbody></table></div>
+      <p class="note"><strong>알려진 한계:</strong> 부록 정의표가 여러 용어를 한 Chunk에 담고 있어 "○○의 정의"류 질문에서 정의표가 본문·결론도출근거에 밀릴 수 있습니다. 실측에서 유효이자율 정의 질문이 근거 부족으로 처리됐습니다. 정의 영역 가산점 또는 용어 단위 재청킹으로 개선 가능합니다.</p>
     </section>
   </div>
 
@@ -619,7 +632,7 @@
       <div class="rule-box"><h3>실제 길이 분포</h3><ul><li>문단 중앙값 250자</li><li>95백분위 656자</li><li>99백분위 1,224자</li><li>1,200자 초과 문단 40개</li></ul></div>
       <div class="rule-box"><h3>원문 추적 검증</h3><ul><li>문단 3,904개</li><li>소분류 2,125개</li><li>내용 Block 6,462개</li><li>표 362개·소속 각주 215개</li></ul></div>
     </div>
-    <p class="note"><strong>산출물:</strong> <a href="data/chunks/chunks.jsonl">chunks.jsonl</a>, <a href="data/chunks/chunk_manifest.json">chunk_manifest.json</a>, <a href="data/chunks/CHUNK_QUALITY_REPORT.md">CHUNK_QUALITY_REPORT.md</a>. PDF 1,671쪽에서 문단 3,904/3,904와 검색 대상 문단 3,891/3,891, 검색 대상 Chunk 4,144/4,144를 매핑했습니다. 저신뢰도 101개와 복수 후보 216개를 포함한 검토 목록 287개를 생성했고 현재 전체 테스트 123개를 통과했습니다. 독립 감사에서 IE142 317~318쪽, KIFRS1032-T-0049 84~85쪽, 16C·35M·7.2.12 오탐, B3.2.17 절 제목 경계를 교정했으며 anchor 후보 페이지를 보존합니다.</p>
+    <p class="note"><strong>산출물:</strong> <a href="data/chunks/chunks.jsonl">chunks.jsonl</a>, <a href="data/chunks/chunk_manifest.json">chunk_manifest.json</a>, <a href="data/chunks/CHUNK_QUALITY_REPORT.md">CHUNK_QUALITY_REPORT.md</a>. PDF 1,671쪽에서 문단 3,904/3,904와 검색 대상 문단 3,891/3,891, 검색 대상 Chunk 4,144/4,144를 매핑했습니다. 저신뢰도 101개와 복수 후보 216개를 포함한 검토 목록 287개를 생성했고 구현 시점 기준 전체 테스트 123개를 통과했습니다(과거 실행 기록). 독립 감사에서 IE142 317~318쪽, KIFRS1032-T-0049 84~85쪽, 16C·35M·7.2.12 오탐, B3.2.17 절 제목 경계를 교정했으며 anchor 후보 페이지를 보존합니다.</p>
   </section>
 
   <section class="panel design-section" id="graph-model">
@@ -631,13 +644,8 @@
                                                                   +--HAS_TABLE----> [Table]
                                                                   `--HAS_FOOTNOTE-> [Footnote]
 
-의미 계층
-[Paragraph/Block/Table] --MENTIONS--> [Concept]
-[Paragraph] --ESTABLISHES---> [Rule]
-[Rule]      --HAS_CONDITION-> [Condition]
-[Rule]      --HAS_EXCEPTION-> [Exception]
-[Example]   --ILLUSTRATES---> [Rule]
-[Appendix Paragraph] --EXPLAINS-> [Body Paragraph]
+의미 계층 (공식 정의에서 결정적으로 생성)
+[Paragraph/Block/Table] --MENTIONS--> [Concept] --정의 출처--> [정의표/정의 블록]
 
 기준서 간 연결
 [Paragraph] --REFERS_TO-> [다른 기준서 Paragraph]</pre>
@@ -651,14 +659,14 @@
 [Chunk.text] --------------> Neo4j Full-text Index (cjk analyzer)</pre>
 
     <h3>본문·부록·사례 연결 예시</h3>
-    <pre class="ascii">[본문 5.5.3] -----ESTABLISHES----> [기대신용손실 인식 Rule]
-      |                                      ^
-      `--MENTIONS--> [기대신용손실 Concept]   |
-                         ^                    |
-                         |                    |
-[부록 B5.5.3] --MENTIONS-+--EXPLAINS----------+
-                                              |
-[적용사례 IE12] ------------ILLUSTRATES--------+</pre>
+    <pre class="ascii">[본문 5.5.3] --MENTIONS--+
+                          |
+[부록 B5.5.3] --MENTIONS--+--> [기대신용손실 Concept]
+                          |            |
+[적용사례 IE12] -MENTIONS-+            `--정의 출처--> [1109호 정의표 T-0014]
+
+Concept는 탐색을 잇는 중간 노드이며 최종 인용 근거로 제시하지 않습니다.
+답변 근거는 항상 공식 정의표 또는 기준서 원문 문단입니다.</pre>
 
     <h3>서로 다른 기준서 연결 예시</h3>
     <pre class="ascii">                         [금융상품 Concept]
@@ -672,7 +680,7 @@
 
 [1109 문단] --REFERS_TO--> [1032 문단 11: 금융부채 정의]</pre>
 
-    <p class="note"><strong>노드 생성 원칙:</strong> 기준서·영역·절·공식 문단·번호가 있는 소분류·표·각주·검색 Chunk·주요 개념·규칙·조건·예외·사례를 노드 후보로 둡니다. 일반 문장은 원문 Block으로 유지하고, 독립 참조 대상이거나 중요한 판단조건일 때만 의미 노드로 승격합니다.</p>
+    <p class="note"><strong>노드 생성 원칙:</strong> 기준서·영역·절·공식 문단·번호가 있는 소분류·표·각주·검색 Chunk·공식 정의 기반 개념을 노드로 둡니다. 일반 문장은 원문 Block으로 유지합니다. 모든 문장을 의미 노드로 승격하지 않습니다.</p>
   </section>
 
   <section class="panel design-section" id="relation-detection">
@@ -684,14 +692,15 @@
 2. 명시적 참조
    “제1032호 문단 11”, “문단 5.5.17 참조”를 규칙으로 추출하여 REFERS_TO 생성
                       |
-3. 개념 후보
-   회계 용어사전 + 동의어 + 임베딩 유사도로 관련 문단 후보 생성
+3. 공식 개념
+   기준서의 용어 정의표에서 canonical name과 원문에 명시된 alias만 추출
                       |
-4. 의미 판단
-   OpenAI API가 DEFINES / EXPLAINS / CONDITION / EXCEPTION / ILLUSTRATES 후보 생성
+4. 개념 연결
+   본문·표·적용사례에 그 명칭이 정확히 등장할 때만 MENTIONS 생성
                       |
 5. 검증
-   실제 근거 문구·문단 존재·문맥·신뢰도를 확인하고 승인된 관계만 검색에 사용</pre>
+   개수·정의 출처·승인 상태·실제 정의 경로를 Cypher로 재현하여 확인</pre>
+    <p class="note"><strong>LLM 추론으로 만든 의미 관계는 사용하지 않습니다.</strong> 규칙·조건·예외·사례를 LLM으로 추출하는 방식을 검토·구현했으나, 사람 승인 절차를 운영할 계획이 없어 최종적으로 제거했습니다. 현재 의미 계층은 문자열 일치로 결정되는 Concept·MENTIONS뿐입니다.</p>
 
     <h3>4개 HWPX 실제 문단 참조 표현 조사 결과</h3>
     <p class="note"><strong>조사 범위:</strong> 1032·1039·1107·1109호의 모든 HWPX section에서 <code>문단</code> 표현을 조사했습니다. 범위 기호는 총 476건이 확인됐습니다.</p>
@@ -860,11 +869,12 @@
     <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>재정렬:</strong> OpenAI gpt-5.6-terra가 개별 Chunk가 아닌 그래프 근거 묶음을 재정렬합니다.</span></div>
     <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>Graph hop:</strong> 허용 관계만 기본 1-hop, 명시적 참조·세부노드 부모 복원·질문어 일치 시 최대 2-hop이며 결과 40개·frontier 12개로 제한합니다.</span></div>
     <div class="status-line"><span class="badge done">✓ 개념 KG 완료</span><span><strong>의미 KG:</strong> 공식 정의 기반 Concept 45개와 MENTIONS 17,712개를 Neo4j에 적재했습니다. 규칙·조건·예외·사례 자동 KG는 최종 범위에서 제외했습니다.</span></div>
-    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>Neo4j 환경:</strong> 로컬로 개발하고 최종제품 완성 후 필요 시 Aura로 이전합니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>Neo4j 환경:</strong> 로컬에서 개발한 뒤 Aura Free로 이전했습니다. 노드 22,018개·관계 92,121개를 적재하고 검증기 3종을 통과했습니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>프레임워크:</strong> LangChain·LangGraph를 사용하지 않고 Neo4j Driver와 OpenAI SDK를 직접 호출합니다. 그래프 hop·관계 화이트리스트·탐색 예산을 정밀하게 통제해야 하고, 상태 전이가 1회 재검색뿐이라 일반 반복문으로 충분하기 때문입니다.</span></div>
     <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>평가 범위:</strong> 자동 벤치마크와 네 방식 비교는 구현하지 않고 사용자가 직접 평가합니다.</span></div>
     <div class="callout" style="margin-top:16px">
       <h3>현재 진행 상태</h3>
-      <p>파싱·페이지 매핑·구조/참조 그래프·공식 Concept KG·임베딩·Hybrid → Graph → 재정렬·충분성·1회 재검색·단일 답변·인용 검증·FastAPI·제품 UI가 완료되었습니다. 추가 의미 KG, 자동 테스트, 운영 로그는 향후 선택 사항입니다. 현재는 10단계 무료 클라우드 배포(Aura Free + HF Spaces + Cloudflare Pages)를 진행 중이며, 배포 준비 코드(CORS·요청 제한·Dockerfile·프론트 번들)는 완료되고 계정 생성·데이터 적재·실제 배포가 남아 있습니다.</p>
+      <p>파싱·페이지 매핑·구조/참조 그래프·공식 Concept KG·임베딩·Hybrid → Graph → 재정렬·충분성·1회 재검색·단일 답변·인용 검증·FastAPI·제품 UI가 완료되었고, 무료 클라우드 배포(Aura Free + Render + Cloudflare Pages)까지 마쳤습니다. 이후 비동기 작업 API와 이미지 첨부를 추가하고, 사용하지 않는 의미 규칙 KG를 제거했습니다. 남은 한계는 정의를 직접 묻는 질문에서 부록 정의표가 본문 문단에 밀리는 검색 편향이며, 정의 영역 가산점 또는 용어 단위 재청킹으로 개선할 수 있습니다.</p>
     </div>
   </section>
 

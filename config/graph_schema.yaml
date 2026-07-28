@@ -37,10 +37,6 @@ ids:
   Chunk: chunk_id
   ExternalStandard: external_standard_id
   Concept: concept_id
-  Rule: rule_id
-  Condition: condition_id
-  Exception: exception_id
-  Example: example_id
 
 id_rules:
   Standard: "source standard_id (for example 1032)"
@@ -122,18 +118,6 @@ nodes:
     grade: A
     source: official definition tables and definition blocks
     properties: [concept_id, canonical_name, aliases, alias_search_text, definition, definitions_json, standard_ids, source_ids, extractor_model, extractor_version, review_status]
-  Rule:
-    grade: B
-    properties: [rule_id, statement, rule_type, extractor_model, extractor_version, review_status]
-  Condition:
-    grade: B
-    properties: [condition_id, statement, extractor_model, extractor_version, review_status]
-  Exception:
-    grade: B
-    properties: [exception_id, statement, extractor_model, extractor_version, review_status]
-  Example:
-    grade: B
-    properties: [example_id, statement, extractor_model, extractor_version, review_status]
 
 relationship_properties:
   required: [provenance, confidence, review_status]
@@ -171,21 +155,6 @@ relationships:
     grade: A
     directions: [Paragraph->Concept, Block->Concept, Table->Concept]
     source: official definitions plus exact lexical matching
-  ESTABLISHES:
-    grade: B
-    directions: [Paragraph->Rule]
-  HAS_CONDITION:
-    grade: B
-    directions: [Rule->Condition]
-  HAS_EXCEPTION:
-    grade: B
-    directions: [Rule->Exception]
-  APPLIES_TO:
-    grade: B
-    directions: [Rule->Concept]
-  ILLUSTRATES:
-    grade: B
-    directions: [Example->Rule]
   EXPLAINS:
     grade: B
     directions: [Paragraph->Paragraph]
@@ -194,7 +163,7 @@ traversal:
   semantic_and_reference:
     default_hops: 2
     maximum_hops: 3
-    allowed_relationships: [REFERS_TO, MENTIONS, ESTABLISHES, HAS_CONDITION, HAS_EXCEPTION, APPLIES_TO, ILLUSTRATES, EXPLAINS]
+    allowed_relationships: [REFERS_TO, MENTIONS, EXPLAINS]
     semantic_review_status: approved
   hierarchy:
     maximum_hops: 6

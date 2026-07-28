@@ -1,4 +1,4 @@
-# Accounting RAG 프로젝트 구조
+﻿# Accounting RAG 프로젝트 구조
 
 ## 1. 프로젝트 정의
 
@@ -158,19 +158,30 @@ Neo4j의 `HybridCypherRetriever`도 벡터·전문 검색으로 유사 노드를
 | Embedding | OpenAI Embeddings | Chunk 벡터 생성 |
 | 데이터베이스 | Neo4j 로컬 → Aura | 그래프·벡터·전문 검색 통합 저장 |
 | DB 접근 | Neo4j Python Driver, 명시적 Cypher | 재현 가능한 적재와 제한된 그래프 탐색 |
-| RAG 부품 | LangChain 및 langchain-neo4j | OpenAI, 임베딩, Neo4j Retriever 연결 |
-| 워크플로 | 현재 일반 Python `AccountingQAPipeline`, 필요 시 LangGraph | 질문 분석→검색→확장→재검색→검증 상태 제어 |
+| RAG 파이프라인 | 프레임워크 없이 직접 구현 | Hybrid 결합, 그래프 확장, 재정렬, 충분성 검사, 인용 검증 |
+| 워크플로 | 일반 Python `AccountingQAPipeline` | 질문 분석→검색→확장→재검색→검증 상태 제어 |
 | API | FastAPI | 질의 및 근거 응답 |
 | 데이터 검증 | Pydantic | JSONL, LLM Structured Output, API 스키마 |
 | 테스트 | pytest | 파서·청킹·그래프·검색·답변 회귀 검증 |
 
-HWPX 파싱과 Neo4j 적재는 일반 Python 스크립트로 구현했다. 온라인 질문 처리도 현재는 테스트하기 쉬운 동기식 `AccountingQAPipeline`으로 완성했으며, 최대 1회 재검색 상태가 명시적으로 제한된다. UI에서 스트리밍·중단·재개·장기 실행 상태가 실제로 필요해질 때 같은 상태 전이를 LangGraph로 옮길 수 있지만, 현재 기능을 위해 불필요하게 의존성을 추가하지 않는다.
+**LangChain과 LangGraph는 사용하지 않는다.** 의존성 목록에도 포함하지 않았다. 이 프로젝트가 필요로 하는 동작이 프레임워크의 기본 제공 범위를 벗어나기 때문이다.
+
+- Hybrid 검색 결과를 Seed로 삼아 **기본 1-hop, 조건부 2-hop**으로만 그래프를 확장한다.
+- 허용 관계 7종만 통과시키고 `APPEARS_ON`처럼 문서 전체로 확산되는 관계는 제외한다.
+- 결과 40개, 2-hop frontier 12개로 탐색 예산을 고정한다.
+- 각 근거에 Seed, hop, 관계 경로, 유입 채널을 provenance로 보존한다.
+
+이 제어를 프레임워크 위에 올리면 결국 대부분을 직접 작성한 뒤 그 위에 한 겹을 더 얹는 구조가 된다. 따라서 Neo4j Python Driver와 OpenAI SDK를 직접 호출한다.
+
+워크플로도 마찬가지다. 상태 전이가 `검색 → 충분성 검사 → (부족하고 누락 측면이 명확할 때만) 1회 재검색`뿐이라 일반 `for` 반복문으로 충분하다. 스트리밍·중단·재개·장기 실행 상태가 실제로 필요해지면 같은 상태 전이를 LangGraph로 옮길 수 있지만, 현재 기능을 위해 불필요하게 의존성을 추가하지 않는다.
 
 LLM이 임의의 Cypher를 생성하여 전체 DB를 탐색하게 하지 않는다. 운영 검색은 관계 유형, 방향, 깊이, 최대 노드 수가 정해진 Cypher 템플릿을 사용한다.
 
 ---
 
-## 5. 목표 디렉터리 구조
+## 5. 디렉터리 구조
+
+아래는 설계 초기에 그린 목표 구조다. 실제 구현에서는 `docs/`·`cypher/`·`prompts/`를 별도로 두지 않고 `NEO4J_SCHEMA.md`를 루트에, DDL을 `db/`에, 프롬프트를 `config/*.yaml` 안에 통합했다. 현재 실제 구조는 이 문서 하단의 구현 단계와 저장소 트리를 따른다.
 
 ```text
 accounting_rag/
@@ -371,12 +382,10 @@ OpenAI가 생성하는 질문 분석, 의미 관계 후보, 재정렬 결과, �
 | 라벨 | 의미 | 필수 추적정보 |
 |---|---|---|
 | `Concept` | 금융자산, 상각후원가, ECL 등 | 대표명, 공식 정의, 승인된 동의어, 정의 출처 |
-| `Rule` | 인식·분류·측정·제거·표시·공시 규칙 | 규칙 문장, 근거 문단 |
-| `Condition` | 규칙이 적용되는 조건 | 조건 문장, 근거 범위 |
-| `Exception` | 규칙의 예외 | 예외 문장, 근거 범위 |
-| `Example` | 적용사례 | 사례 ID, 근거 문단 |
 
-`Concept`는 현재 네 기준서의 공식 용어 정의에서 결정적으로 생성한다. `Rule`, `Condition`, `Exception`, `Example`은 OpenAI 후보 추출과 사람 승인 이후 적재한다. 의미 노드와 관계에는 `confidence`, `source_id`, `source_text_span`, `extractor_model`, `extractor_version`, `review_status`를 저장한다.
+의미 노드는 `Concept` 하나만 사용한다. 네 기준서의 공식 용어 정의(제1107·1109호 정의표, 제1032호 문단 11, 제1039호 문단 9)에서 결정적으로 생성하므로 LLM 추론이 개입하지 않는다. 의미 노드와 관계에는 `confidence`, `source_id`, `source_text_span`, `extractor_model`, `extractor_version`, `review_status`를 저장한다.
+
+`Rule`·`Condition`·`Exception`·`Example`은 설계 검토 후 최종 범위에서 제외했다(위 "의미 규칙 KG — 시도 후 제거" 참고).
 
 ### 8.3 주요 관계
 
@@ -396,12 +405,6 @@ OpenAI가 생성하는 질문 분석, 의미 관계 후보, 재정렬 결과, �
 (:Paragraph)-[:REFERS_TO]->(:Paragraph)
 (:Paragraph)-[:REFERS_TO]->(:ExternalStandard)
 (:Paragraph|Block|Table)-[:MENTIONS]->(:Concept)
-(:Paragraph)-[:ESTABLISHES]->(:Rule)
-(:Rule)-[:HAS_CONDITION]->(:Condition)
-(:Rule)-[:HAS_EXCEPTION]->(:Exception)
-(:Rule)-[:APPLIES_TO]->(:Concept)
-(:Example)-[:ILLUSTRATES]->(:Rule)
-(:Paragraph)-[:EXPLAINS]->(:Paragraph)
 ```
 
 ### 8.4 관계 생성 신뢰도
@@ -544,9 +547,8 @@ OpenAI 재정렬기는 통합 후보를 최대 48개까지 입력받을 수 있�
 1. 질문에 직접 답할 수 있는 공식 본문 또는 공식 부록 문단이 최소 하나 존재한다.
 2. 복합 질문의 각 하위 질문에 하나 이상의 근거가 연결된다.
 3. 핵심 문단의 직접 `REFERS_TO` 대상 중 판단에 필요한 문단이 포함된다.
-4. 검색된 Rule에 연결된 주요 Condition과 Exception이 누락되지 않는다.
-5. 적용사례나 결론도출근거만 있고 규범적 본문이 없는 경우 이를 충분한 규정 근거로 보지 않는다.
-6. 외부 기준서가 필요하지만 원문이 적재되지 않았다면 범위 제한을 표시한다.
+4. 적용사례나 결론도출근거만 있고 규범적 본문이 없는 경우 이를 충분한 규정 근거로 보지 않는다.
+5. 외부 기준서가 필요하지만 원문이 적재되지 않았다면 범위 제한을 표시한다.
 
 부족하면 `missing_aspects`를 생성하여 해당 부분만 질문을 확장하고 최대 1회 재검색한다.
 
@@ -661,7 +663,7 @@ TRUST_PROXY_HEADERS=1
 - 저신뢰도 101개와 복수 후보 216개를 포함한 검토 목록 287개 별도 생성
 - 표 341/362개 매핑. 미매핑 표는 대부분 실질 내용이 없는 orphan이며 검색 대상 표 Chunk는 모두 페이지 보유
 - 각주 227/227개 매핑
-- 현재 전체 테스트 123개 통과
+- 구현 시점 기준 전체 테스트 123개 통과(과거 실행 기록)
 - PDF 42·119·142·317·318쪽과 제1032호 85쪽 시각 표본 대조 완료
 - 독립 감사에서 IE142의 317~318쪽, `KIFRS1032-T-0049`의 84~85쪽을 수정하고 16C·35M·7.2.12의 앞쪽 오탐을 제거했다. B3.2.17 다음 절 제목은 문단 경계에서 분리하고 anchor 후보 페이지는 감사 추적용으로 보존한다.
 
@@ -676,7 +678,6 @@ TRUST_PROXY_HEADERS=1
 - Neo4j 검증기가 Full-text analyzer=`cjk`, `기대신용손실` probe와 인덱스 ONLINE 상태를 확인하며 `valid=true`
 - 공식 정의 기반 `Concept` 45개와 승인된 `MENTIONS` 17,712개 생성·적재. 그중 47개는 정의 출처 관계이며 `concept_fulltext` 인덱스를 생성
 - 동일 공식 용어는 하나의 공유 Concept로 병합하고, 원문에 명시된 장·단기 명칭만 alias로 승인. 임의의 AC·ECL 약어는 만들지 않음
-- OpenAI 기반 `Rule`·`Condition`·`Exception`·`Example` 후보 생성과 사람 승인은 후속 작업으로 유지
 
 구조·개념 적재 완료 조건: 대표 문단에서 원문 계층, 표·각주, 참조 범위와 `문단 → Concept → 공식 정의` 경로를 Cypher로 재현하고 중복 없이 재적재할 수 있다. `scripts/validate_semantic_kg.py`가 개수·출처·승인 상태·ECL 경로·인덱스를 검증한다.
 
@@ -689,7 +690,7 @@ TRUST_PROXY_HEADERS=1
 - `config/retrieval.yaml`의 Dense/Sparse 후보 수, 가중치와 RRF k를 사용하는 weighted RRF 결합
 - `scripts/query_hybrid.py` CLI와 기준서·영역 메타데이터 필터 구현
 - 정확한 문단 직접 조회 라우팅과 운영 검색 로그는 후속 파이프라인에서 완성
-- 현재 전체 테스트 123개 통과
+- 구현 시점 기준 전체 테스트 123개 통과(과거 실행 기록)
 
 핵심 완료 조건: 질문별 Dense/Sparse 후보의 원점수·순위·유입 채널과 weighted RRF Seed가 반환된다. 운영 로그 영속화는 답변 파이프라인에서 추가한다.
 
@@ -702,7 +703,7 @@ TRUST_PROXY_HEADERS=1
 - `reranker.py`: OpenAI Responses JSON Schema Structured Output, 네 평가 가중치와 결정적 fallback 구현
 - `scripts/query_retrieval.py`: 기준서·영역 필터와 결과 수를 지원하는 통합 CLI 구현
 - 실제 검증: Seed 10개, 그래프 근거 40개, 재정렬 후보 15개, 결과 10개. B5.5.51·B5.5.52 등 직접 적용지침이 최상위로 개선
-- 현재 전체 테스트 123개 통과
+- 구현 시점 기준 전체 테스트 123개 통과(과거 실행 기록)
 
 완료 조건: 선택된 각 결과에서 Hybrid 유입 채널 또는 Seed, 그래프 경로, hop, 관계 유형과 최종 원문을 역추적할 수 있다.
 
@@ -739,36 +740,59 @@ TRUST_PROXY_HEADERS=1
 
 완료 조건: 로컬 환경에서 현재 기능을 사용할 수 있고, 공개 저장소에는 코드·스키마·설정 예시·문서만 포함된다.
 
-### Phase 9. 무료 클라우드 배포 — 진행 중
+### Phase 9. 무료 클라우드 배포 — 완료
 
-사용자 결정에 따라 로컬 완성본을 무료 구성으로 공개 배포한다. 상세 절차는 `DEPLOYMENT.md` 참고.
+로컬 완성본을 전액 무료 구성으로 공개 배포했다.
 
-확정 구성:
+| 계층 | 서비스 | 비고 |
+|---|---|---|
+| 데이터베이스 | Neo4j AuraDB Free | 3일 미사용 시 일시정지, 로컬 데이터가 원본 |
+| 백엔드 | Render 무료 웹 서비스 (Docker) | 15분 유휴 시 슬립, 첫 요청 지연 발생 |
+| 프론트엔드 | Cloudflare Pages | 정적 자산 직접 업로드 |
 
-- DB: Neo4j AuraDB Free (3일 미사용 시 일시정지, 로컬 데이터가 원본)
-- 백엔드: Hugging Face Spaces Docker (FastAPI, 포트 7860, 환경변수는 HF Secrets)
-- 프론트엔드: Cloudflare Pages 정적 업로드
-- GitHub: 포트폴리오용 공개 저장소는 RAG 구현만 포함(웹 UI 제외), 배포와 별개
+백엔드는 처음에 Hugging Face Spaces를 검토했으나, Docker Space가 유료 구독 전용으로 바뀌어 Render로 변경했다.
 
-완료된 배포 준비:
+배포를 위해 추가한 사항:
 
-- `api/app.py`에 `CORS_ALLOW_ORIGINS` 기반 CORS와 `ASK_RATE_LIMIT_PER_HOUR` 기반 IP당 요청 제한 추가(미설정 시 기존 동작 불변)
-- `api/static/config.js`로 프론트엔드 API 주소 분리(`app.js`는 `APP_CONFIG.apiBase` 사용)
-- HF Spaces용 `Dockerfile`과 README 메타데이터 작성
-- `scripts/build_frontend_dist.py`로 Pages 업로드 번들(`deploy/frontend_dist/`) 생성 자동화
-- `DEPLOYMENT.md` 단계별 가이드 작성
+- `CORS_ALLOW_ORIGINS`로 프론트엔드 origin만 허용
+- `ASK_RATE_LIMIT_PER_HOUR`로 IP당 시간당 요청 제한(OpenAI 비용 보호)
+- `TRUST_PROXY_HEADERS`로 리버스 프록시 뒤에서만 `X-Forwarded-For` 신뢰
+- `api/static/config.js`로 프론트엔드 API 주소 분리
+- `Dockerfile`(Render `PORT` 환경변수 대응)과 `scripts/build_frontend_dist.py`
+- 위 환경변수는 모두 선택 항목이며 미설정 시 로컬 동작이 바뀌지 않는다
 
-남은 작업(사용자 계정 필요):
+Aura 적재 결과는 로컬과 동일하다. 노드 22,018개, 관계 92,121개, 검색 대상 Chunk 4,144개 전체 임베딩 보유, `chunk_embedding_vector`와 `chunk_fulltext(cjk)` 모두 ONLINE으로 검증했다.
 
-1. Aura Free 인스턴스 생성 → 로컬에서 환경변수 오버라이드로 적재·검증
-2. HF Space 생성·Secrets 등록 → 코드 푸시 → `/health` 확인
-3. 프론트 번들 생성 → Pages 업로드 → CORS origin 등록 → 실제 질의 확인
-4. GitHub 포트폴리오 저장소 생성·푸시
+### Phase 10. 비동기 답변과 이미지 첨부 — 완료
+
+답변 생성에 30~60초가 걸려 브라우저 연결이 끊기면 결과를 잃는 문제가 있었다. 요청을 작업 단위로 분리했다.
+
+- `POST /v1/jobs`가 즉시 `job_id`를 반환하고 백그라운드 스레드가 파이프라인을 수행한다.
+- 클라이언트는 `GET /v1/jobs/{job_id}`로 `pending → complete | error`를 폴링한다.
+- 작업은 프로세스 메모리에 10분간만 보관하며 만료분은 자동 정리한다.
+- `DELETE /v1/jobs/{job_id}`로 조기 정리할 수 있다.
+- 답변 대기 중 새로고침해도 폴링을 이어간다.
+
+이미지 첨부도 추가했다. 첨부 이미지는 OpenAI 비전 모델로 문구·숫자·표 구조를 텍스트로 옮긴 뒤 질문에 덧붙여 기존 검색 경로를 그대로 탄다. 이미지는 서버에 저장하지 않고 OpenAI에도 `store=False`로 전달한다. PNG·JPEG·WEBP·GIF, 최대 4장, 장당 5MB로 제한하며 서버에서 base64 유효성과 크기를 다시 검증한다.
+
+기존 `POST /v1/ask` 동기 엔드포인트도 유지한다.
+
+### 의미 규칙 KG — 시도 후 제거
+
+`Rule`·`Condition`·`Exception`·`Example` 후보 추출기와 사람 검토 UI를 한 차례 구현했으나 최종적으로 제거했다. 후보를 실제로 생성·승인하지 않아 검색에 사용된 적이 없고, 승인 절차를 운영할 계획이 없기 때문이다. 관련 노드·관계 정의도 `config/graph_schema.yaml`에서 함께 삭제했다.
+
+검색은 A등급 사실 그래프(문단 구조, 명시적 참조, 공식 정의 기반 Concept)만 사용한다.
 
 ---
 
 ## 17. 최종 상태
 
-현재 프로젝트의 합의된 로컬 기능 범위는 완료됐고, 무료 클라우드 배포(Phase 9)가 진행 중이다. 추가 자동 테스트, Rule·Condition·Exception·Example 의미 KG, 운영 로그, 피드백 저장은 필수 작업이 아니라 향후 선택 사항이다.
+로컬 기능 범위와 무료 클라우드 배포가 모두 완료됐다. 추가 자동 테스트, 의미 규칙 KG, 운영 로그, 피드백 저장은 필수 작업이 아니라 향후 선택 사항이다.
+
+### 알려진 한계
+
+- **정의를 직접 묻는 질문의 검색 편향**: 부록 정의표는 여러 용어를 한 Chunk에 담고 있어, 해당 용어를 자주 언급하는 본문·결론도출근거 문단에 순위가 밀릴 수 있다. 실측에서 "유효이자율의 정의"를 물었을 때 정의표(`KIFRS1109-T-0014`)가 상위 10개에 들지 못해 근거 부족으로 처리됐다. 정의 질문에 정의 영역 가산점을 주거나 정의표를 용어 단위로 재청킹하면 개선할 수 있다.
+- **좁은 근거 질문**: 충분성 검사가 자격 근거 2개 이상을 요구하므로 단일 문단에만 존재하는 내용은 기각될 수 있다. 실측한 정의·문단 지정 질문은 모두 통과했으나 구조적 가능성은 남아 있다. `config/answering.yaml`에서 임계값을 조정할 수 있다.
+- **콜드 스타트**: Render 무료 플랜은 15분 유휴 후 슬립하여 첫 요청이 최대 1분가량 지연된다.
 
 GitHub 공개 시에는 `.gitignore`에 따라 기준서 원본, 파싱 원문, Chunk, 임베딩, 의미 KG 산출물과 `.env`를 제외하고 코드·스키마·설정 예시·문서만 게시한다. 포트폴리오 저장소에는 사용자 결정에 따라 웹 UI 구현을 제외하고 RAG 구현만 포함한다.
