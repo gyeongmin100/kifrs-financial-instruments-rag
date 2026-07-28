@@ -1,0 +1,17 @@
+[project]
+name = "accounting-rag"
+version = "0.1.0"
+description = "K-IFRS financial instruments parsing and GraphRAG project"
+requires-python = ">=3.11"
+dependencies = [
+  "httpx>=0.27,<1",
+  "neo4j>=5.28,<7",
+  "openai>=1.0",
+  "pypdf>=6.0",
+  "python-dotenv>=1.0",
+  "PyYAML>=6.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

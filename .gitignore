@@ -1,0 +1,34 @@
+.env
+.env.*
+!.env.example
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+logs/
+*.log
+
+# Licensed K-IFRS source documents remain local, including files kept at project root.
+*.hwp
+*.hwpx
+*.pdf
+
+# Parsed text, chunks, embeddings, semantic KG exports, and validation artifacts
+# are derived from the local source documents and are not part of the public code repo.
+data/raw/**
+data/processed/**
+data/chunks/**
+data/embeddings/**
+data/semantic/**
+data/validation/**
+!data/README.md
+
+# Local Neo4j/Docker runtime state.
+neo4j-data/
+neo4j-logs/
+neo4j-import/
+
+# Generated deployment bundles.
+deploy/

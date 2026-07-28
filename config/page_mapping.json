@@ -1,0 +1,9 @@
+{
+  "anchor_chars": 32,
+  "minimum_text_chars": 8,
+  "fuzzy_threshold": 0.82,
+  "fuzzy_window_pages": 8,
+  "maximum_span_pages": 12,
+  "child_window_pages": 3,
+  "review_confidence_below": 0.75
+}

@@ -1,0 +1,4 @@
+query_analysis:
+  allowed_standard_ids: ["1032", "1039", "1107", "1109"]
+  max_output_tokens: 1800
+  max_question_chars: 12000

@@ -1,0 +1,12 @@
+sufficiency:
+  min_candidates: 3
+  min_distinct_evidence_ids: 2
+  min_non_empty_text: 2
+  min_cited_candidates: 2
+  min_scored_candidates: 2
+  min_qualified_evidence: 2
+  min_question_relevance: 3
+  min_direct_evidence: 3
+  semantic_confidence_threshold: 0.65
+  max_evidence_chars: 1800
+  max_output_tokens: 2500

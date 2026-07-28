@@ -1,0 +1,901 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>금융상품 회계기준 RAG 프로젝트 전체 Workflow</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f5f7fb;
+      --surface: #ffffff;
+      --surface-2: #eef2f8;
+      --text: #172033;
+      --muted: #5f6c82;
+      --line: #d8dfeb;
+      --brand: #3157d5;
+      --brand-soft: #e8edff;
+      --done: #14804a;
+      --done-soft: #e3f6eb;
+      --next: #b35c00;
+      --next-soft: #fff0d8;
+      --decision: #6d3fc0;
+      --decision-soft: #f0e8ff;
+      --pending: #697386;
+      --pending-soft: #edf0f4;
+      --shadow: 0 10px 30px rgba(26, 39, 74, .08);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1420;
+        --surface: #171e2c;
+        --surface-2: #20293a;
+        --text: #edf2fa;
+        --muted: #a9b4c7;
+        --line: #344057;
+        --brand: #89a4ff;
+        --brand-soft: #26345f;
+        --done: #71d69e;
+        --done-soft: #173a2a;
+        --next: #ffbd6b;
+        --next-soft: #493317;
+        --decision: #c4a1ff;
+        --decision-soft: #372650;
+        --pending: #b4bdca;
+        --pending-soft: #293141;
+        --shadow: none;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Pretendard, "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+      line-height: 1.55;
+    }
+    main { max-width: 1220px; margin: 0 auto; padding: 32px 22px 72px; }
+    h1, h2, h3 { line-height: 1.3; margin-top: 0; }
+    h1 { font-size: clamp(1.7rem, 4vw, 2.6rem); margin-bottom: 10px; }
+    h2 { font-size: 1.35rem; margin-bottom: 14px; }
+    h3 { font-size: 1.05rem; margin-bottom: 8px; }
+    p { margin: 0 0 12px; }
+    code { background: var(--surface-2); padding: 2px 6px; border-radius: 5px; }
+    .hero, .panel, .phase-detail {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+    }
+    .hero { padding: 28px; margin-bottom: 18px; }
+    .eyebrow { color: var(--brand); font-weight: 700; letter-spacing: .04em; }
+    .sub { color: var(--muted); max-width: 920px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }
+    .metric { padding: 15px; background: var(--surface-2); border-radius: 12px; }
+    .metric strong { display: block; font-size: 1.45rem; }
+    .metric span { color: var(--muted); font-size: .88rem; }
+    .progress { height: 12px; background: var(--pending-soft); border-radius: 999px; overflow: hidden; margin-top: 16px; }
+    .progress > div { height: 100%; background: var(--done); width: 0; transition: width .3s ease; }
+    .panel { padding: 22px; margin: 18px 0; }
+    .action-grid { display: grid; grid-template-columns: 1.25fr .75fr; gap: 16px; }
+    .callout { border-left: 5px solid var(--next); background: var(--next-soft); padding: 18px; border-radius: 10px; }
+    .callout ul, .later ul { margin: 8px 0 0; padding-left: 22px; }
+    .later { background: var(--surface-2); padding: 18px; border-radius: 10px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .badge { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 4px 9px; font-size: .82rem; font-weight: 700; white-space: nowrap; }
+    .done { color: var(--done); background: var(--done-soft); }
+    .next { color: var(--next); background: var(--next-soft); }
+    .decision { color: var(--decision); background: var(--decision-soft); }
+    .pending { color: var(--pending); background: var(--pending-soft); }
+    .workflow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 26px 12px; margin: 28px 0 8px; counter-reset: phase -1; }
+    .phase-button {
+      position: relative; min-height: 116px; padding: 14px 10px; color: var(--text); background: var(--surface);
+      border: 2px solid var(--line); border-radius: 14px; cursor: pointer; text-align: left;
+    }
+    .phase-button:hover, .phase-button:focus-visible { border-color: var(--brand); outline: 3px solid var(--brand-soft); }
+    .phase-button[aria-selected="true"] { border-color: var(--brand); background: var(--brand-soft); }
+    .phase-button:not(:nth-child(5n))::after {
+      content: "→"; position: absolute; right: -22px; top: 43px; color: var(--muted); font-size: 1.3rem;
+    }
+    .phase-no { font-weight: 800; color: var(--brand); }
+    .phase-name { display: block; font-weight: 800; margin: 6px 0; }
+    .phase-note { display: block; color: var(--muted); font-size: .82rem; }
+    .phase-status { margin-top: 8px; }
+    .phase-detail { padding: 24px; margin: 20px 0; scroll-margin-top: 14px; }
+    .phase-detail.hidden { display: none; }
+    .phase-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; flex-wrap: wrap; }
+    .goal { color: var(--muted); max-width: 900px; }
+    .table-wrap { overflow-x: auto; margin-top: 16px; }
+    table { border-collapse: collapse; width: 100%; min-width: 850px; }
+    th, td { padding: 11px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: var(--surface-2); font-size: .86rem; }
+    td:nth-child(1) { width: 76px; font-family: ui-monospace, monospace; font-weight: 700; }
+    td:nth-child(2) { width: 105px; }
+    td:nth-child(4) { width: 105px; }
+    .note { margin-top: 15px; padding: 13px 15px; background: var(--surface-2); border-radius: 9px; color: var(--muted); }
+    .decision-box { border-left: 4px solid var(--decision); }
+    .design-index { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+    .design-index a { color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; text-decoration: none; font-weight: 700; }
+    .design-index a:hover, .design-index a:focus-visible { border-color: var(--brand); outline: 3px solid var(--brand-soft); }
+    .design-section { scroll-margin-top: 16px; }
+    .design-section details { border-top: 1px solid var(--line); padding: 12px 0; }
+    .design-section details:first-of-type { border-top: 0; }
+    .design-section summary { cursor: pointer; font-weight: 800; }
+    .ascii { margin: 12px 0; padding: 16px; overflow-x: auto; background: var(--surface-2); border-radius: 10px; color: var(--text); font-family: Consolas, "Courier New", monospace; font-size: .88rem; line-height: 1.5; white-space: pre; }
+    .rule-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .rule-box { background: var(--surface-2); border-radius: 10px; padding: 15px; }
+    .rule-box ul { margin: 8px 0 0; padding-left: 20px; }
+    .status-line { display: flex; align-items: flex-start; gap: 9px; margin: 8px 0; }
+    .status-line .badge { flex: 0 0 auto; }
+    footer { color: var(--muted); margin-top: 30px; font-size: .9rem; }
+    @media (max-width: 900px) {
+      .summary-grid { grid-template-columns: repeat(2, 1fr); }
+      .action-grid { grid-template-columns: 1fr; }
+      .design-index { grid-template-columns: repeat(2, 1fr); }
+      .rule-grid { grid-template-columns: 1fr; }
+      .workflow { grid-template-columns: repeat(2, 1fr); }
+      .phase-button:not(:nth-child(5n))::after { content: none; }
+    }
+    @media (max-width: 520px) {
+      main { padding: 20px 12px 48px; }
+      .hero, .panel, .phase-detail { padding: 17px; border-radius: 12px; }
+      .design-index { grid-template-columns: 1fr; }
+      .workflow { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <div class="eyebrow">K-IFRS 금융상품 질의응답 시스템</div>
+    <h1>Hybrid RAG + GraphRAG 전체 프로젝트 Workflow</h1>
+    <p class="sub">1032·1039·1107·1109호를 근거로 일반 질문·기준서 해석·비교·계산·시험형 질문에 답하고, 결론·판단 과정·근거 문단을 제시하는 최종제품 수준의 프로젝트입니다.</p>
+    <div class="summary-grid" aria-label="현재 프로젝트 요약">
+      <div class="metric"><strong>4개</strong><span>대상 회계기준서</span></div>
+      <div class="metric"><strong>1,671쪽</strong><span>확보한 PDF 총 페이지</span></div>
+      <div class="metric"><strong>362개</strong><span>HWPX 내부 표</span></div>
+      <div class="metric"><strong>227개</strong><span>HWPX 내부 각주</span></div>
+    </div>
+    <div class="progress" aria-label="작업 항목 완료율"><div id="progressBar"></div></div>
+    <p id="progressText" class="sub" style="margin-top:8px"></p>
+  </header>
+
+  <section class="panel">
+    <h2>지금 어디까지 왔나?</h2>
+    <p><span class="badge done">✓ 완료</span> 네 기준서 구조화부터 검색용 질문 분석, Hybrid → Graph → 재정렬, 충분성 검사·1회 재검색, 단일 답변 생성, 인용 검증과 FastAPI까지 구현했습니다.</p>
+    <p><span class="badge done">✓ 현재 상태</span> 백엔드 API와 <strong>질문·답변·원문·PDF·그래프 경로 UI</strong> 구현 및 실제 질의 검증을 완료했습니다.</p>
+  </section>
+
+  <section class="panel action-grid">
+    <div class="callout">
+      <h2>사용자님이 지금 할 일</h2>
+      <ol>
+        <li><strong>원본 파일은 수정하지 말고 그대로 보관</strong>해 주세요. 파서는 복사본/산출물만 다룹니다.</li>
+        <li>1109호 파서 시제품 검수와 검색 아키텍처 결정이 완료됐으므로 지금 추가로 제출하거나 결정할 사항은 없습니다.</li>
+        <li><a href="data/processed/QUALITY_REPORT.md"><strong>전체 파싱 품질보고서</strong></a>를 확인할 수 있습니다. 현재 사용자 결정이 필요한 오류는 없습니다.</li>
+        <li>대상 미확정 참조 190개는 삭제된 과거 문단·중복 번호 등을 포함하며 원문과 함께 별도 보존했습니다.</li>
+      </ol>
+      <p style="margin-top:12px"><strong>새로 변환하거나 정리할 파일은 없습니다. 다음 단계는 로컬 운영 구성과 추후 Aura 이전 준비입니다.</strong></p>
+    </div>
+    <div class="later">
+      <h2>나중에 결정할 것</h2>
+      <ul>
+        <li>로컬 제품 완성 후 Neo4j Aura 이전 시점과 요금제</li>
+        <li>로컬 시연·비공개 배포·공개 서비스 중 최종 배포 범위</li>
+        <li>공개 서비스 시 기준서 원문·PDF 노출 범위와 이용 조건</li>
+        <li>사용자 직접 평가에 사용할 질문과 판정 기준</li>
+      </ul>
+      <p class="sub" style="margin-top:12px">OpenAI 모델명과 Neo4j 로컬 접속정보는 이미 .env에 정리됐습니다. 위 항목은 로컬 제품이 동작한 뒤 결정해도 됩니다.</p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>상태 표시</h2>
+    <div class="legend">
+      <span class="badge done">✓ 완료</span>
+      <span class="badge next">▶ 다음 작업</span>
+      <span class="badge decision">◆ 사용자 결정 필요</span>
+      <span class="badge pending">○ 대기</span>
+    </div>
+    <p class="sub">아래 단계 상자를 누르면 해당 섹터의 세부 작업 목록만 볼 수 있습니다.</p>
+    <nav class="workflow" aria-label="프로젝트 단계">
+      <button class="phase-button" data-phase="0" aria-selected="true"><span class="phase-no">0단계</span><span class="phase-name">범위·원본 준비</span><span class="phase-note">기준서와 변환본 확보</span><span class="badge done phase-status">진행 중 일부 완료</span></button>
+      <button class="phase-button" data-phase="1" aria-selected="false"><span class="phase-no">1단계</span><span class="phase-name">파서 시제품</span><span class="phase-note">문단·표·각주 보존 검증</span><span class="badge done phase-status">완료</span></button>
+      <button class="phase-button" data-phase="2" aria-selected="false"><span class="phase-no">2단계</span><span class="phase-name">전체 문서 구조화</span><span class="phase-note">4개 기준서 정제·청킹</span><span class="badge done phase-status">청킹 완료</span></button>
+      <button class="phase-button" data-phase="3" aria-selected="false"><span class="phase-no">3단계</span><span class="phase-name">Neo4j 그래프</span><span class="phase-note">구조·참조 적재 완료</span><span class="badge done phase-status">구조 적재 완료</span></button>
+      <button class="phase-button" data-phase="4" aria-selected="false"><span class="phase-no">4단계</span><span class="phase-name">Hybrid RAG</span><span class="phase-note">Dense+CJK Sparse+RRF</span><span class="badge done phase-status">검색 핵심 완료</span></button>
+      <button class="phase-button" data-phase="5" aria-selected="false"><span class="phase-no">5단계</span><span class="phase-name">GraphRAG</span><span class="phase-note">그래프 확장·재정렬</span><span class="badge done phase-status">완료</span></button>
+      <button class="phase-button" data-phase="6" aria-selected="false"><span class="phase-no">6단계</span><span class="phase-name">답변 시스템</span><span class="phase-note">근거·계산·인용 생성</span><span class="badge done phase-status">완료</span></button>
+      <button class="phase-button" data-phase="7" aria-selected="false"><span class="phase-no">7단계</span><span class="phase-name">사용자 검수 지원</span><span class="phase-note">수동 평가용 근거·로그</span><span class="badge done phase-status">범위 확정</span></button>
+      <button class="phase-button" data-phase="8" aria-selected="false"><span class="phase-no">8단계</span><span class="phase-name">제품 UI·API</span><span class="phase-note">API·UI 실제 검증</span><span class="badge done phase-status">완료</span></button>
+      <button class="phase-button" data-phase="9" aria-selected="false"><span class="phase-no">9단계</span><span class="phase-name">프로젝트 마무리</span><span class="phase-note">공개 범위·보안·문서화</span><span class="badge done phase-status">✓ 완료</span></button>
+      <button class="phase-button" data-phase="10" aria-selected="false"><span class="phase-no">10단계</span><span class="phase-name">무료 클라우드 배포</span><span class="phase-note">Aura·HF Spaces·Pages</span><span class="badge next phase-status">▶ 진행 중</span></button>
+    </nav>
+  </section>
+
+  <div id="phaseDetails">
+    <section class="phase-detail" data-detail="0">
+      <div class="phase-header"><div><h2>0. 프로젝트 범위와 원본 준비</h2><p class="goal">목표: 어떤 문서를 어떤 규칙으로 다룰지 확정하고, 원본 손상 없이 재현 가능한 입력 세트를 만든다.</p></div><span class="badge done">핵심 범위 완료</span></div>
+      <div class="table-wrap"><table><thead><tr><th>ID</th><th>상태</th><th>작업</th><th>담당</th><th>완료 기준</th></tr></thead><tbody>
+        <tr><td>S0-01</td><td><span class="badge done">✓ 완료</span></td><td>대상 기준서 1032·1039·1107·1109호 확보</td><td>사용자</td><td>각 기준서 PDF/HWP/HWPX 존재</td></tr>
+        <tr><td>S0-02</td><td><span class="badge done">✓ 완료</span></td><td>HWP를 HWPX로 변환</td><td>사용자</td><td>4개 HWPX가 정상 ZIP/XML 구조</td></tr>
+        <tr><td>S0-03</td><td><span class="badge done">✓ 완료</span></td><td>PDF 페이지 수 및 HWPX 표·각주 구조 점검</td><td>Codex</td><td>PDF 1,671쪽, 표 362개, 각주 227개 확인</td></tr>
+        <tr><td>S0-04</td><td><span class="badge done">✓ 완료</span></td><td>기준서 본문 시작 페이지 확인</td><td>Codex</td><td>1032·1039·1107 p.9, 1109 p.11 확인</td></tr>
+        <tr><td>S0-05</td><td><span class="badge done">✓ 완료</span></td><td>원본/중간산출물/최종산출물 폴더 분리 및 파일명 규칙 확정</td><td>Codex</td><td>원본은 읽기 전용 취급, 산출물 경로 고정</td></tr>
+        <tr><td>S0-06</td><td><span class="badge done">✓ 공개 전 확인</span></td><td>기준서 판본·시행일·다운로드 출처는 원본 파일과 함께 로컬 관리</td><td>사용자</td><td>공개 저장소에는 원문을 제외하고 재배포 범위를 별도 확인</td></tr>
+        <tr><td>S0-07</td><td><span class="badge done">✓ 완료</span></td><td>자동 벤치마크와 RAG 방식별 비교를 구현 범위에서 제외하고 사용자가 직접 평가</td><td>사용자</td><td>평가 책임과 구현 범위가 분리됨</td></tr>
+      </tbody></table></div>
+      <p class="note decision-box"><strong>현재 적용 방식:</strong> 네 기준서를 모두 지식베이스에 포함하되, 첫 개발·디버깅은 가장 핵심인 1109호 일부 구간으로 진행했습니다.</p>
+    </section>
+
+    <section class="phase-detail hidden" data-detail="1">
+      <div class="phase-header"><div><h2>1. 1109호 파서 시제품</h2><p class="goal">목표: 전체 문서를 처리하기 전에 작은 구간에서 구조 보존과 PDF 페이지 인용이 정확한지 증명한다.</p></div><span class="badge done">✓ 완료</span></div>
+      <div class="table-wrap"><table><thead><tr><th>ID</th><th>상태</th><th>작업</th><th>담당</th><th>완료 기준</th></tr></thead><tbody>
+        <tr><td>S1-01</td><td><span class="badge done">✓ 완료</span></td><td>1109호에서 일반 문단·목록·표·각주·적용지침이 모두 있는 대표 구간 선정</td><td>Codex</td><td>검증용 페이지와 문단 범위 기록</td></tr>
+        <tr><td>S1-02</td><td><span class="badge done">✓ 완료</span></td><td>HWPX XML에서 문단 번호, 제목 계층, 본문, 표, 각주 추출</td><td>Codex</td><td>요소 순서가 원문과 동일한 JSON 생성</td></tr>
+        <tr><td>S1-03</td><td><span class="badge done">✓ 완료</span></td><td>표를 행·열 구조와 셀 병합 정보가 남는 형태로 직렬화</td><td>Codex</td><td>표를 평문으로 뭉개지 않고 재구성 가능</td></tr>
+        <tr><td>S1-04</td><td><span class="badge done">✓ 완료</span></td><td>각주 본문과 각주 표식을 양방향 ID로 연결</td><td>Codex</td><td>본문에서 각주로, 각주에서 본문으로 추적 가능</td></tr>
+        <tr><td>S1-05</td><td><span class="badge done">✓ 시제품 완료</span></td><td>1109호 대표 HWPX 요소와 PDF 실제 페이지 매핑</td><td>Codex</td><td>대표 검수 문단 10개의 PDF 페이지 10/10 확인</td></tr>
+        <tr><td>S1-06</td><td><span class="badge done">✓ 완료</span></td><td>저작권·제정경위·목차 등 검색 제외 구간에 문서 유형 태그 부여. section 번호를 고정해서 건너뛰지 않고 문서별 내용 경계로 판정</td><td>Codex</td><td>1032호처럼 본문이 section0에 있는 문서도 누락하지 않고, 앞부분은 삭제 대신 보존하되 기본 검색에서 제외</td></tr>
+        <tr><td>S1-07</td><td><span class="badge done">✓ 완료</span></td><td>10~20개 샘플 수동 대조표 작성</td><td>Codex</td><td>대표 문단 10개의 텍스트·번호·표·각주·페이지 검증표 생성</td></tr>
+        <tr><td>S1-08</td><td><span class="badge done">✓ 완료</span></td><td>샘플 원문 대조 및 오류 표시</td><td>사용자</td><td>대표 문단 JSON·PDF 대조 결과 이상 없음으로 승인</td></tr>
+      </tbody></table></div>
+      <p class="note"><strong>중요:</strong> 목차 문자열로만 자르는 것이 아니라, HWPX의 제목/문단 구조와 기준서 문단번호를 함께 사용합니다. PDF는 페이지 인용과 표의 시각 검증에 사용합니다.</p>
+    </section>
+
+    <section class="phase-detail hidden" data-detail="2">
+      <div class="phase-header"><div><h2>2. 네 기준서 전체 구조화·청킹</h2><p class="goal">목표: 검색에 필요한 의미 단위와 회계기준의 계층을 보존한 표준 JSON/JSONL 데이터셋을 만든다.</p></div><span class="badge done">✓ 청킹 완료</span></div>
+      <div class="table-wrap"><table><thead><tr><th>ID</th><th>상태</th><th>작업</th><th>담당</th><th>완료 기준</th></tr></thead><tbody>
+        <tr><td>S2-01</td><td><span class="badge done">✓ 완료</span></td><td>문서별 HWPX 섹션 구성을 먼저 판정한 뒤 시제품 파서를 4개 기준서 전체에 실행</td><td>Codex</td><td>1032호 section0 본문을 포함하여 문서별 구조화 JSONL 생성</td></tr>
+        <tr><td>S2-02</td><td><span class="badge done">✓ 완료</span></td><td>본문, 적용지침, 사례, 결론도출근거, 소수의견 등 document_zone 분류</td><td>Codex</td><td>영역별 검색 우선순위 제어 가능</td></tr>
+        <tr><td>S2-03</td><td><span class="badge done">✓ 완료</span></td><td>전체 Block 기준 길이 분포를 측정하고, 짧은 문단은 병합하지 않으며 1,200자 초과 긴 문단만 하위항목·continuation 경계에서 분할</td><td>Codex</td><td>중앙값 250자·95백분위 656자·1,200자 초과 40개 확인 및 4,379개 Chunk 생성</td></tr>
+        <tr><td>S2-04</td><td><span class="badge done">✓ 완료</span></td><td>표를 행 경계에서 최대 1,800자로 분할하고 가능한 경우 첫 행을 반복하며 설명 문단에 연결</td><td>Codex</td><td>362개 표에서 410개 표 Chunk 생성</td></tr>
+        <tr><td>S2-05</td><td><span class="badge done">✓ 완료</span></td><td>단일·범위·복수·세부항목·타 기준서 참조 추출. 공백 유무, ~·∼·–·-·～, 쉼표, 과/와, 및, 또는, 이나와 한·BA·BCE 등 번호형식 지원</td><td>Codex</td><td>7,450개 참조의 원문, 시작·끝 번호, 실제 대상 ID와 미해결 상태 저장</td></tr>
+        <tr><td>S2-06</td><td><span class="badge done">✓ 완료</span></td><td>Chunk ID, 기준서, 영역, 계층, 원문 Paragraph/Subparagraph/Block, 표·각주, 판본 해시, 검색 우선순위와 PDF 페이지 메타데이터 부여</td><td>Codex</td><td>모든 Chunk의 원문 ID 역추적 성공, 검색 대상 4,144/4,144개 페이지 보유</td></tr>
+        <tr><td>S2-07</td><td><span class="badge done">✓ 완료</span></td><td>중복·빈 Chunk·길이 제한·원문 Paragraph/Subparagraph/continuation/Table/Footnote 누락 자동 품질검사</td><td>Codex</td><td>품질보고서 생성, 독립 검증과 현재 전체 테스트 123개 통과</td></tr>
+        <tr><td>S2-08</td><td><span class="badge done">✓ 완료</span></td><td>고정 샘플 및 실제 발견 참조표현 회귀 테스트</td><td>Codex</td><td>10개 자동 테스트 통과, 숫자형 문단 표현 미파싱 후보 0개</td></tr>
+        <tr><td>S2-09</td><td><span class="badge done">✓ 완료</span></td><td>전체 Chunk의 PDF 페이지 매핑과 저신뢰·복수 후보 검토 목록 생성</td><td>Codex</td><td>문단 3,904/3,904, 검색 대상 문단 3,891/3,891, 검색 대상 Chunk 4,144/4,144 페이지 매핑</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <section class="phase-detail hidden" data-detail="3">
+      <div class="phase-header"><div><h2>3. Neo4j 지식 그래프 설계·적재</h2><p class="goal">목표: 기준서 간 연결과 금융상품 판단 절차를 그래프로 탐색할 수 있게 만든다.</p></div><span class="badge done">✓ 구조·참조 적재 완료</span></div>
+      <div class="table-wrap"><table><thead><tr><th>ID</th><th>상태</th><th>작업</th><th>담당</th><th>완료 기준</th></tr></thead><tbody>
+        <tr><td>S3-01</td><td><span class="badge done">✓ 완료</span></td><td>로컬 Neo4j로 개발하고 제품 완성 후 필요 시 Aura로 이전</td><td>사용자</td><td>.env의 로컬 접속정보 사용, Aura는 후속 배포 결정으로 분리</td></tr>
+        <tr><td>S3-02</td><td><span class="badge done">✓ 완료</span></td><td>원문·검색 노드 스키마: Standard, Zone, Section, Paragraph, Subparagraph, Block, Table, Footnote, PdfPage, Chunk, ExternalStandard</td><td>Codex</td><td>NEO4J_SCHEMA.md, config/graph_schema.yaml과 고유 ID 규칙 정의</td></tr>
+        <tr><td>S3-03</td><td><span class="badge done">✓ 스키마 완료</span></td><td>구조·참조 관계와 후속 의미 노드·관계 스키마 정의</td><td>Codex</td><td>A등급 구조·참조 관계의 방향·근거 속성·허용 hop·검색 등급 문서화</td></tr>
+        <tr><td>S3-04</td><td><span class="badge done">✓ 완료</span></td><td>규칙 기반 상호참조 관계 자동 생성. 범위 참조는 대상 기준서의 실제 문단 순서표에서 시작~끝 사이 문단을 각각 REFERS_TO로 확장</td><td>Codex</td><td>실제 문단만 연결한 REFERS_TO 12,796개와 원문 범위·그룹 속성 적재</td></tr>
+        <tr><td>S3-05A</td><td><span class="badge done">✓ 완료</span></td><td>공식 정의 기반 Concept와 정확 문자열 MENTIONS 생성</td><td>Codex</td><td>Concept 45개, MENTIONS 17,712개, 공식 정의 관계 47개. source span·방법·버전·승인 상태 보존</td></tr>
+        <tr><td>S3-05B</td><td><span class="badge done">✓ 범위 제외</span></td><td>Rule·Condition·Exception·Example 자동 의미 KG</td><td>향후 선택</td><td>현재 Concept·MENTIONS KG로 최종 범위를 확정</td></tr>
+        <tr><td>S3-06</td><td><span class="badge done">✓ 완료</span></td><td>공식 용어 중복 병합과 원문 기반 동의어 연결</td><td>Codex</td><td>동일 공식 용어를 공유 Concept로 병합. 원문에 없는 AC·ECL 등의 약어는 임의 생성하지 않음</td></tr>
+        <tr><td>S3-07</td><td><span class="badge done">✓ 완료</span></td><td>고유 제약조건, 조회 인덱스, Full-text Index, Vector Index 생성 및 재실행 가능한 적재</td><td>Codex</td><td>총 관계 74,409개 적재, chunk_fulltext(cjk)·chunk_embedding_vector ONLINE, 한국어 probe 포함 검증기 valid</td></tr>
+        <tr><td>S3-08</td><td><span class="badge done">✓ 범위 제외</span></td><td>추가 대표 금융상품 판단 경로 수동 검증</td><td>향후 선택</td><td>추가 테스트·평가는 사용자 선택으로 분리</td></tr>
+      </tbody></table></div>
+      <p class="note"><strong>실제 로컬 적재:</strong> 기존 구조·참조 그래프에 Concept 45개와 MENTIONS 17,712개를 추가했습니다. MENTIONS 중 47개는 공식 정의 출처 관계입니다. <code>concept_fulltext</code> CJK 인덱스와 <code>scripts/validate_semantic_kg.py</code>로 개수·출처·승인 상태·ECL 정의 경로를 검증합니다.</p>
+    </section>
+
+    <section class="phase-detail hidden" data-detail="4">
+      <div class="phase-header"><div><h2>4. Hybrid RAG 구현</h2><p class="goal">목표: Dense와 Sparse 검색을 RRF로 결합해 그래프 탐색을 시작할 신뢰 가능한 Seed 문단을 찾는다.</p></div><span class="badge done">✓ 검색 핵심 완료</span></div>
+      <div class="table-wrap"><table><thead><tr><th>ID</th><th>상태</th><th>작업</th><th>담당</th><th>완료 기준</th></tr></thead><tbody>
+        <tr><td>S4-01</td><td><span class="badge done">✓ 설정 확정</span></td><td>.env에서 OpenAI 답변·임베딩·재정렬 모델과 Neo4j 접속정보 분리</td><td>공동</td><td>OPENAI_CHAT_MODEL, OPENAI_EMBEDDING_MODEL, OPENAI_RERANK_MODEL과 Neo4j 변수 존재</td></tr>
+        <tr><td>S4-02</td><td><span class="badge done">✓ 완료</span></td><td>CJK analyzer 기반 한국어 Sparse 검색 구축</td><td>Codex</td><td>chunk_fulltext에서 한국어 용어와 문단 문맥 회수</td></tr>
+        <tr><td>S4-03</td><td><span class="badge done">✓ 완료</span></td><td>text-embedding-3-large 3,072차원 벡터 검색 구축</td><td>Codex</td><td>4,144개 Chunk.embedding 적재 및 chunk_embedding_vector ONLINE</td></tr>
+        <tr><td>S4-04</td><td><span class="badge done">✓ 완료</span></td><td>Dense 상위 20개와 Sparse 상위 20개를 weighted RRF로 결합하고 초기 Seed 상위 10개 선정</td><td>Codex</td><td>원점수·순위·유입 채널과 RRF 점수 보존</td></tr>
+        <tr><td>S4-05</td><td><span class="badge done">✓ 완료</span></td><td>기준서·영역 메타데이터 필터 적용</td><td>Codex</td><td>standard_id와 zone으로 검색 범위 제어</td></tr>
+        <tr><td>S4-06</td><td><span class="badge done">✓ 선택 사항</span></td><td>정확한 기준서·문단번호 직접 조회 최적화</td><td>향후 선택</td><td>현재 Hybrid 경로로도 답변 가능하므로 필수 범위에서 제외</td></tr>
+        <tr><td>S4-07</td><td><span class="badge done">✓ 범위 제외</span></td><td>검색 로그와 비용·지연시간 측정</td><td>향후 운영</td><td>로컬 포트폴리오 범위에는 포함하지 않음</td></tr>
+      </tbody></table></div>
+      <p class="note"><strong>구현 산출물:</strong> <code>config/embedding.json</code>, <code>config/retrieval.yaml</code>, <code>src/accounting_rag/retrieval/embeddings.py</code>, <code>src/accounting_rag/retrieval/hybrid.py</code>, <code>scripts/build_embeddings.py</code>, <code>scripts/load_embeddings_neo4j.py</code>, <code>scripts/validate_embeddings.py</code>, <code>scripts/query_hybrid.py</code>. 임베딩 cache·manifest·report를 생성했고 현재 전체 테스트 123개를 통과했습니다.</p>
+    </section>
+
+    <section class="phase-detail hidden" data-detail="5">
+      <div class="phase-header"><div><h2>5. GraphRAG·재정렬 구현</h2><p class="goal">목표: Hybrid Seed에서 구조·참조 관계를 제한적으로 확장하고, 통합 근거 후보를 OpenAI 모델로 재정렬한다.</p></div><span class="badge done">✓ 완료</span></div>
+      <div class="table-wrap"><table><thead><tr><th>ID</th><th>상태</th><th>작업</th><th>담당</th><th>완료 기준</th></tr></thead><tbody>
+        <tr><td>S5-01</td><td><span class="badge done">✓ 완료</span></td><td>Hybrid 상위 Chunk를 DERIVED_FROM 원문 Paragraph/Subparagraph로 변환하여 Graph Seed 생성</td><td>Codex</td><td>검색용 이동을 의미 hop에서 제외하고 원문 노드에서 탐색 시작</td></tr>
+        <tr><td>S5-02</td><td><span class="badge done">✓ 완료</span></td><td>별도 엔터티 직접 연결에 의존하지 않고 Hybrid Seed를 항상 그래프 시작점으로 사용</td><td>Codex</td><td>자연어와 노드 이름이 달라도 Hybrid 경로가 유지됨</td></tr>
+        <tr><td>S5-03</td><td><span class="badge done">✓ 완료</span></td><td>허용 관계만 기본 1-hop, 명시적 참조·세부노드 부모 복원·질문어 일치 시 최대 2-hop 탐색</td><td>Codex</td><td>결과 최대 40개·2-hop frontier 최대 12개·방문 집합으로 그래프 폭발 방지</td></tr>
+        <tr><td>S5-04</td><td><span class="badge done">✓ 완료</span></td><td>Hybrid와 Graph 근거 후보를 통합·중복 제거하고 Seed, 관계, hop, 전체 경로와 provenance 보존</td><td>Codex</td><td>최종 후보에서 원문과 검색 경로를 역추적 가능</td></tr>
+        <tr><td>S5-05</td><td><span class="badge done">✓ 선택 사항</span></td><td>복합 질문의 추가 다단계 분해</td><td>향후 선택</td><td>현재 질문 분석·보완 검색으로 최종 범위를 확정</td></tr>
+        <tr><td>S5-06</td><td><span class="badge done">✓ 완료</span></td><td>OPENAI_RERANK_MODEL과 Responses JSON Schema Structured Output으로 후보를 평가해 기본 상위 10개 선택</td><td>Codex</td><td>관련성 40%·본문 우선도 20%·직접 근거성 30%·참조 연결성 10%와 선택 이유 보존</td></tr>
+        <tr><td>S5-07</td><td><span class="badge done">✓ fallback 완료</span></td><td>API·응답 검증 실패 시 입력 후보 순서를 유지하는 결정적 fallback</td><td>Codex</td><td>외부 호출 실패가 전체 질의 실패로 이어지지 않음. 운영 비용·시간 로그는 제품 단계에서 추가</td></tr>
+      </tbody></table></div>
+      <p class="note"><strong>실제 통합 검증:</strong> Hybrid Seed 10개 → 그래프 근거 40개 → 중복 제거된 재정렬 후보 15개 → 결과 10개를 반환했습니다. 재정렬 후 B5.5.51·B5.5.52 등 질문에 직접 적용되는 기대신용손실 지침이 최상위로 올라왔습니다. 구현 파일은 <code>graph_expansion.py</code>, <code>reranker.py</code>, <code>pipeline.py</code>, <code>scripts/query_retrieval.py</code>입니다.</p>
+    </section>
+
+    <section class="phase-detail hidden" data-detail="6">
+      <div class="phase-header"><div><h2>6. 근거 기반 답변 시스템</h2><p class="goal">목표: 답변 전 근거 충분성과 답변 후 인용 타당성을 분리해 검사하고, 결론·판단 과정·근거만 명확히 제시한다.</p></div><span class="badge done">✓ 완료</span></div>
+      <div class="table-wrap"><table><thead><tr><th>ID</th><th>상태</th><th>작업</th><th>담당</th><th>완료 기준</th></tr></thead><tbody>
+        <tr><td>S6-01</td><td><span class="badge done">✓ 완료</span></td><td>검색에 필요한 기준서·문단번호·개념·하위 질문을 strict Structured Output으로 분석</td><td>Codex</td><td>답변 유형을 분류하지 않고 명시 조건을 보존하며 실패 시 원문 검색 fallback</td></tr>
+        <tr><td>S6-02</td><td><span class="badge done">✓ 단일화</span></td><td>객관식·주관식·계산형 전용 라우팅 없이 모든 요청을 일반 답변 생성기로 처리</td><td>Codex</td><td>사용자 질문 원문에 맞춰 결론·판단 과정·근거를 생성하고 동일한 인용 검증 적용</td></tr>
+        <tr><td>S6-04</td><td><span class="badge done">✓ 완료</span></td><td>답변 전 결정적 조건과 OpenAI 의미 판단을 결합한 충분성 검사</td><td>Codex</td><td>claim coverage·supported evidence·missing aspects·confidence 저장</td></tr>
+        <tr><td>S6-05</td><td><span class="badge done">✓ 완료</span></td><td>근거 부족 시 missing_aspects만 확장해 최대 1회 재검색</td><td>Codex</td><td>무한 반복 없이 계속 부족하면 insufficient 반환</td></tr>
+        <tr><td>S6-06</td><td><span class="badge done">✓ 완료</span></td><td>답변 생성 후 evidence ID, citation, 실제 후보와 문장별 인용 무결성 검증</td><td>Codex</td><td>근거 밖 주장과 존재하지 않는 문단 인용 차단</td></tr>
+        <tr><td>S6-07</td><td><span class="badge done">✓ 완료</span></td><td>일반 답변을 결론 / 판단 과정 / 근거로 구성하고 검증된 인용만 포함</td><td>Codex</td><td>모든 주요 사실 주장에 실제 기준서 근거 연결</td></tr>
+        <tr><td>S6-08</td><td><span class="badge done">✓ 완료</span></td><td>OpenAI API·구조화 출력 실패의 보수적 fallback</td><td>Codex</td><td>실패가 조용히 잘못된 답변으로 변하지 않음</td></tr>
+      </tbody></table></div>
+      <p class="note"><strong>실제 전체 질의 검증:</strong> 기대신용손실(ECL) 질문에서 충분성 confidence <strong>0.98</strong>, 검증된 인용 <strong>4개</strong>로 <code>answered</code> 결과를 확인했습니다. 질문 분석·검색·충분성·답변·인용 검증·UI를 포함한 전체 테스트는 123개를 통과했습니다.</p>
+    </section>
+
+    <section class="phase-detail hidden" data-detail="7">
+      <div class="phase-header"><div><h2>7. 사용자 직접 평가 지원</h2><p class="goal">자동 벤치마크와 네 방식 비교는 구현하지 않으며, 사용자가 일반 질문과 시험형 질문을 직접 검토할 수 있는 근거와 로그만 제공한다.</p></div><span class="badge done">범위 확정</span></div>
+      <div class="table-wrap"><table><thead><tr><th>ID</th><th>상태</th><th>작업</th><th>담당</th><th>완료 기준</th></tr></thead><tbody>
+        <tr><td>S7-01</td><td><span class="badge done">✓ 완료</span></td><td>자동 평가 데이터 구축·정답률 계산·Base/Hybrid/Graph/Combined 비교를 구현 범위에서 제외</td><td>사용자</td><td>사용자가 완성 시스템을 직접 평가하는 것으로 확정</td></tr>
+        <tr><td>S7-02</td><td><span class="badge done">✓ 현재 UI 제공</span></td><td>최종 인용, Hybrid/Graph 출처, hop과 관계 경로 제공</td><td>Codex</td><td>현재 UI의 근거 카드와 debug 응답으로 확인 가능</td></tr>
+        <tr><td>S7-03</td><td><span class="badge done">✓ 범위 제외</span></td><td>사용자 피드백과 메모 저장</td><td>향후 운영</td><td>로컬 포트폴리오 범위에는 포함하지 않음</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <section class="phase-detail hidden" data-detail="8">
+      <div class="phase-header"><div><h2>8. 최종제품 UI·API</h2><p class="goal">목표: 질문, 결론·판단 과정·근거, 기준서 원문, PDF 페이지와 그래프 경로를 실제 사용자가 확인할 수 있는 제품으로 만든다.</p></div><span class="badge done">✓ 완료</span></div>
+      <div class="table-wrap"><table><thead><tr><th>ID</th><th>상태</th><th>작업</th><th>담당</th><th>완료 기준</th></tr></thead><tbody>
+        <tr><td>S8-01</td><td><span class="badge done">✓ 완료</span></td><td>FastAPI <code>/health</code>, <code>/v1/ask</code>와 요청·응답·오류 스키마 구현</td><td>Codex</td><td>질문부터 검증된 답변과 선택적 debug 진단까지 API 제공</td></tr>
+        <tr><td>S8-02</td><td><span class="badge done">✓ 완료</span></td><td>질문 입력과 답변·로딩·오류 화면</td><td>Codex</td><td>진행 상태와 실패 상태가 명확함</td></tr>
+        <tr><td>S8-03</td><td><span class="badge done">✓ 완료</span></td><td>근거 문단·기준서·문단번호·PDF 페이지 패널</td><td>Codex</td><td>사용자가 답을 원문과 즉시 대조 가능</td></tr>
+        <tr><td>S8-04</td><td><span class="badge done">✓ 완료</span></td><td>API의 Hybrid → Graph, 충분성 검사·재검색 진단을 UI 상태로 표시</td><td>Codex</td><td>사용자가 검색 모드를 고르지 않아도 일관된 최종 경로와 상태 확인</td></tr>
+        <tr><td>S8-05</td><td><span class="badge done">✓ 완료</span></td><td>그래프 탐색 hop과 관계 경로 표시</td><td>Codex</td><td>근거 카드에서 GraphRAG 출처와 연결 관계 확인</td></tr>
+        <tr><td>S8-06</td><td><span class="badge done">✓ 범위 제외</span></td><td>시간·토큰·오류 관찰 화면</td><td>향후 운영</td><td>로컬 포트폴리오 범위에는 포함하지 않음</td></tr>
+        <tr><td>S8-07</td><td><span class="badge done">✓ 범위 제외</span></td><td>질문/답변 피드백과 관찰 로그</td><td>향후 운영</td><td>민감정보 저장 기능을 현재 제품에 추가하지 않음</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <section class="phase-detail hidden" data-detail="9">
+      <div class="phase-header"><div><h2>9. 공개 범위·보안·문서화</h2><p class="goal">목표: 원본과 비밀정보를 제외하고 포트폴리오 코드와 설계를 안전하게 정리한다.</p></div><span class="badge done">✓ 완료</span></div>
+      <div class="table-wrap"><table><thead><tr><th>ID</th><th>상태</th><th>작업</th><th>담당</th><th>완료 기준</th></tr></thead><tbody>
+        <tr><td>S9-01</td><td><span class="badge done">✓ 범위 확정</span></td><td>추가 자동 테스트와 CI</td><td>범위 제외</td><td>기존 테스트 코드는 참고용으로 유지하고 추가 실행은 요구하지 않음</td></tr>
+        <tr><td>S9-02</td><td><span class="badge done">✓ 완료</span></td><td>API 키·Neo4j 비밀번호 환경변수/비밀관리</td><td>Codex</td><td><code>.env</code> 제외, 안전한 <code>.env.example</code> 제공</td></tr>
+        <tr><td>S9-03</td><td><span class="badge done">✓ 기본 방어</span></td><td>입력 길이 제한·근거 제한 답변·오류 fallback</td><td>Codex</td><td>원문을 명령으로 실행하지 않고 검증된 근거만 답변에 사용</td></tr>
+        <tr><td>S9-04</td><td><span class="badge done">✓ 범위 제외</span></td><td>비용 한도·운영 관찰성 설정</td><td>향후 운영</td><td>로컬 포트폴리오 범위에는 포함하지 않음</td></tr>
+        <tr><td>S9-05</td><td><span class="badge done">✓ 로컬 확정</span></td><td>로컬 제품과 공개 코드 포트폴리오</td><td>사용자</td><td>기준서 원본·파생 데이터는 로컬에 두고 코드·문서만 공개</td></tr>
+        <tr><td>S9-06</td><td><span class="badge done">✓ 선택 사항</span></td><td>Docker와 Aura 배포</td><td>향후 선택</td><td>현재 로컬 실행을 최종 범위로 확정</td></tr>
+        <tr><td>S9-07</td><td><span class="badge done">✓ 완료</span></td><td>README, 아키텍처, 데이터·API 명세, 공개 범위와 제한사항 작성</td><td>Codex</td><td>현재 구현과 최종 범위 반영</td></tr>
+        <tr><td>S9-08</td><td><span class="badge done">✓ 범위 제외</span></td><td>추가 최종 인수 테스트</td><td>범위 제외</td><td>사용자가 필요할 때 직접 확인</td></tr>
+      </tbody></table></div>
+      <p class="note"><strong>최종 완료 정의:</strong> 로컬 질문·답변 UI/API와 근거 경로가 제공되고, 공개 저장소에는 비밀정보·기준서 원본·파생 원문 데이터를 제외한 코드·설정 예시·문서만 포함합니다. 추가 테스트와 운영 배포 기능은 합의대로 제외합니다.</p>
+    </section>
+
+    <section class="phase-detail hidden" data-detail="10">
+      <div class="phase-header"><div><h2>10. 무료 클라우드 배포</h2><p class="goal">목표: 로컬 완성본을 무료 구성(Neo4j Aura Free + Hugging Face Spaces + Cloudflare Pages)으로 공개한다. 상세 절차는 <code>DEPLOYMENT.md</code> 참고.</p></div><span class="badge next">▶ 진행 중</span></div>
+      <div class="table-wrap"><table><thead><tr><th>ID</th><th>상태</th><th>작업</th><th>담당</th><th>완료 기준</th></tr></thead><tbody>
+        <tr><td>S10-01</td><td><span class="badge done">✓ 완료</span></td><td>배포 구성 확정: DB=Aura Free, 백엔드=HF Spaces(Docker), 프론트=Cloudflare Pages</td><td>사용자</td><td>모두 무료·카드 불필요. 30일 삭제 리스크 감수 합의</td></tr>
+        <tr><td>S10-02</td><td><span class="badge done">✓ 완료</span></td><td>백엔드 CORS 허용 목록(<code>CORS_ALLOW_ORIGINS</code>)과 IP당 시간당 요청 제한(<code>ASK_RATE_LIMIT_PER_HOUR</code>) 추가</td><td>Claude</td><td>환경변수 미설정 시 로컬 동작 불변. 스모크 테스트 통과</td></tr>
+        <tr><td>S10-03</td><td><span class="badge done">✓ 완료</span></td><td>프론트 API 주소를 <code>static/config.js</code>로 분리</td><td>Claude</td><td>apiBase 빈 값이면 기존 same-origin 동작 유지</td></tr>
+        <tr><td>S10-04</td><td><span class="badge done">✓ 완료</span></td><td>HF Spaces용 <code>Dockerfile</code>과 README 메타데이터 작성</td><td>Claude</td><td>포트 7860, 환경변수는 HF Secrets 주입</td></tr>
+        <tr><td>S10-05</td><td><span class="badge done">✓ 완료</span></td><td><code>scripts/build_frontend_dist.py</code>로 Pages 업로드 번들 생성 자동화</td><td>Claude</td><td><code>deploy/frontend_dist/</code> 생성, 백엔드 주소 주입</td></tr>
+        <tr><td>S10-06</td><td><span class="badge done">✓ 완료</span></td><td><code>DEPLOYMENT.md</code> 배포 가이드 작성</td><td>Claude</td><td>계정 준비부터 확인까지 단계별 문서화</td></tr>
+        <tr><td>S10-07</td><td><span class="badge pending">○ 대기</span></td><td>Neo4j Aura Free 인스턴스 생성 및 데이터 적재</td><td>사용자+Claude</td><td>적재 후 <code>validate_neo4j.py</code>·<code>validate_embeddings.py</code> 통과</td></tr>
+        <tr><td>S10-08</td><td><span class="badge pending">○ 대기</span></td><td>HF Space 생성, Secrets 등록, 코드 푸시</td><td>사용자+Claude</td><td><code>/health</code> 200 응답</td></tr>
+        <tr><td>S10-09</td><td><span class="badge pending">○ 대기</span></td><td>Cloudflare Pages 번들 업로드와 CORS origin 등록</td><td>사용자+Claude</td><td>공개 주소에서 실제 질의 응답 확인</td></tr>
+        <tr><td>S10-10</td><td><span class="badge pending">○ 대기</span></td><td>GitHub 포트폴리오 저장소(공개, RAG 구현만·웹 UI 제외) 생성·푸시</td><td>사용자+Claude</td><td>원본·파생 데이터·<code>.env</code> 미포함 확인</td></tr>
+      </tbody></table></div>
+      <p class="note"><strong>보안·비용 방침:</strong> OpenAI 키와 Neo4j 비밀번호는 HF Secrets에만 두고 저장소에는 포함하지 않습니다. 공개 API에는 IP당 시간당 10회 제한을 적용합니다. Aura Free는 3일 미사용 시 일시정지되며 로컬 데이터가 원본이므로 언제든 재적재로 복구합니다.</p>
+    </section>
+  </div>
+
+  <section class="panel design-section" id="design-summary">
+    <div class="phase-header">
+      <div>
+        <div class="eyebrow">설계 기준서</div>
+        <h2>지금까지 합의·검토한 파싱 및 그래프 설계</h2>
+        <p class="goal">아래 내용은 구현 전에 합의한 설계입니다. <strong>설계 합의</strong>와 <strong>코드 구현 완료</strong>는 서로 다른 상태로 관리합니다.</p>
+      </div>
+      <span class="badge decision">설계 검토 중</span>
+    </div>
+    <div class="status-line"><span class="badge done">✓ 합의</span><span>1032·1039·1107·1109호의 모든 내용을 파싱하여 보존하되, 답변 검색 우선순위는 내용의 권위에 따라 다르게 적용합니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 합의</span><span>HWPX는 문서 구조의 기준, PDF는 페이지 인용과 표·레이아웃 검증의 기준으로 사용합니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 합의</span><span>공식 문단을 파싱과 그래프의 중심 단위로 사용하고 표·각주·개념·규칙·조건·예외를 연결합니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 구현</span><span>1109호 대표 문단 10개로 파서 시제품과 PDF 페이지 매핑을 실행했고 자동·시각 검증을 완료했습니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 구현</span><span>네 기준서 전체를 문단·블록·표·각주·참조 JSONL로 구조화하고 자동 무결성 검사를 통과했습니다.</span></div>
+    <nav class="design-index" aria-label="설계 내용 바로가기">
+      <a href="#standard-structure">1. 기준서 구조</a>
+      <a href="#content-policy">2. 전체 내용 반영 정책</a>
+      <a href="#parsing-model">3. 파싱 구조</a>
+      <a href="#chunking-policy">4. 검색 청킹</a>
+      <a href="#graph-model">5. 그래프 구조</a>
+      <a href="#relation-detection">6. 관계 탐지·검증</a>
+      <a href="#retrieval-flow">7. 실제 검색 흐름</a>
+      <a href="#prototype-results">8. 파서 시제품 결과</a>
+      <a href="#full-parser-results">9. 전체 구조화 결과</a>
+      <a href="#open-decisions">10. 남은 결정</a>
+    </nav>
+  </section>
+
+  <section class="panel design-section" id="standard-structure">
+    <h2>1. 네 기준서의 실제 구조</h2>
+    <p class="goal">공통적으로 앞부분, 공식 기준서, 비공식 참고자료가 함께 들어 있습니다. 1109호는 장·절 번호가 명확하고, 나머지는 제목과 문단번호 범위가 중심입니다.</p>
+    <pre class="ascii">기준서 파일
+|
+|-- 표지·저작권·목차·구성 설명
+|
+|-- 공식 기준서
+|   |-- 목적·적용·적용범위
+|   |-- 주요 회계처리 본문
+|   |-- 시행일·경과규정
+|   `-- 공식 부록: 용어 정의·적용지침
+|
+`-- 기준서에 포함되지 않는 참고자료
+    |-- 적용사례·실무적용지침
+    |-- 결론도출근거·소수의견
+    `-- 국제기준과의 관계·개요·제개정 경과</pre>
+
+    <details open>
+      <summary>제1032호 금융상품: 표시 - 문단 1~100과 부록 적용지침</summary>
+      <pre class="ascii">K-IFRS 1032
+|
+|-- 목적·적용·적용범위 (1~10)
+|-- 용어의 정의 (11~14)
+|-- 표시 (15~50)
+|   |-- 부채와 자본 (15~27)
+|   |-- 복합금융상품 (28~32)
+|   |-- 자기주식 (33~34)
+|   |-- 이자·배당·손익 (35~41)
+|   `-- 금융자산과 금융부채의 상계 (42~50)
+|-- 시행일·경과규정 (96~97T)
+|-- 기준서 등의 대체 (98~100)
+`-- 부록 적용지침 (AG3~AG39)
+    |-- 용어 정의 (AG3~AG23)
+    |-- 표시 (AG25~AG37)
+    `-- 상계 (AG38~AG39)
+
+참고자료: 적용사례 IE1~IE50, IAS 32 결론도출근거·소수의견, 기타 참고사항</pre>
+    </details>
+
+    <details>
+      <summary>제1039호 금융상품: 인식과 측정 - 문단 1~110과 부록 A</summary>
+      <pre class="ascii">K-IFRS 1039
+|
+|-- 목적·적용·적용범위 (1~7)
+|-- 용어의 정의 (8~9)
+|-- 기존 문단 다수 삭제 (10~70 구간)
+|-- 위험회피 (71~102)
+|   |-- 위험회피수단 (72~77)
+|   |-- 위험회피대상항목 (78~84)
+|   `-- 위험회피회계 (85~102)
+|       |-- 공정가치위험회피 (89~94)
+|       |-- 현금흐름위험회피 (95~101)
+|       `-- 순투자의 위험회피 (102)
+|-- 한시적 예외·이자율지표 개혁 (102A~102Z3)
+|-- 시행일·경과규정 (103~108K)
+|-- 기준서 등의 대체 (109~110)
+`-- 부록 A 적용지침 (AG94~AG133)
+
+참고자료: 적용사례 IE1~IE31, 실무적용지침, IAS 39 결론도출근거·소수의견
+주의: 현재 문서의 실질적인 핵심은 위험회피회계입니다.</pre>
+    </details>
+
+    <details>
+      <summary>제1107호 금융상품: 공시 - 문단 1~45와 부록 A·B</summary>
+      <pre class="ascii">K-IFRS 1107
+|
+|-- 목적·적용·적용범위 (1~5D)
+|-- 금융상품 종류와 공시수준 (6)
+|-- 재무상태·성과에 미치는 유의성 (7~30)
+|   |-- 재무상태표 공시 (8~19)
+|   |-- 포괄손익계산서 공시 (20~20D)
+|   `-- 회계정책·위험회피·공정가치 공시 (21~30)
+|-- 자연에 의존하는 전력 관련 계약 (30A~30C)
+|-- 금융상품 위험의 특성 및 정도 (31~42)
+|   |-- 질적 공시 (33)
+|   `-- 양적 공시 (34~42)
+|       |-- 신용위험 (35A~38)
+|       |-- 유동성위험 (39)
+|       `-- 시장위험 (40~42)
+|-- 금융자산 양도 (42A~42H)
+|-- 제1109호 최초 적용 보충정보 (42I~42S)
+|-- 시행일·경과규정·대체 (43~45)
+|-- 부록 A 용어의 정의
+`-- 부록 B 적용지침 (B1~B53)
+
+참고자료: 실무적용지침 IG1~IG41, IFRS 7 결론도출근거, 기타 참고사항</pre>
+    </details>
+
+    <details>
+      <summary>제1109호 금융상품 - 문단 1.1~7.3.2와 부록 A·B</summary>
+      <pre class="ascii">K-IFRS 1109
+|
+|-- 제1장 목적 (1.1)
+|-- 제2장 적용범위 (2.1~2.8)
+|-- 제3장 인식과 제거 (3.1.1~3.3.5)
+|   |-- 최초 인식
+|   |-- 금융자산 제거
+|   `-- 금융부채 제거
+|-- 제4장 분류 (4.1.1~4.4.3)
+|   |-- 금융자산 분류
+|   |-- 금융부채 분류
+|   |-- 내재파생상품
+|   `-- 재분류
+|-- 제5장 측정 (5.1.1~5.7.11)
+|   |-- 최초·후속 측정
+|   |-- 상각후원가
+|   |-- 손상·기대신용손실
+|   |-- 재분류
+|   `-- 손익
+|-- 제6장 위험회피회계 (6.1.1~6.10.2)
+|-- 제7장 시행일·경과규정·대체 (7.1.1~7.3.2)
+|-- 부록 A 용어의 정의
+`-- 부록 B 적용지침
+
+참고자료: 적용사례 IE1~IE147, 실무적용지침, IFRS 9 결론도출근거·소수의견</pre>
+    </details>
+
+    <p class="note"><strong>파서 결론:</strong> 1109호는 <code>장 → 절 → 소제목 → 문단</code>, 1032·1039·1107호는 <code>대제목 → 소제목 → 문단</code>으로 읽습니다. 모든 기준서에서 공통으로 가장 신뢰할 수 있는 기준은 공식 문단번호입니다.</p>
+  </section>
+
+  <section class="panel design-section" id="content-policy">
+    <h2>2. 모든 내용 반영 정책</h2>
+    <p class="goal">모든 내용을 파싱·보관하지만, 일반 회계 질문에 검색되는 우선순위는 다르게 설정합니다. 검색 제외는 삭제를 의미하지 않습니다.</p>
+    <div class="rule-grid">
+      <div class="rule-box"><h3>1순위 - 공식 본문</h3><ul><li>목적·적용범위</li><li>인식·제거·분류·측정·손상</li><li>표시·공시·위험회피</li><li>답변의 핵심 근거</li></ul></div>
+      <div class="rule-box"><h3>2순위 - 공식 부록</h3><ul><li>용어 정의</li><li>적용지침</li><li>본문 원칙의 구체화</li><li>답변의 주요 보조 근거</li></ul></div>
+      <div class="rule-box"><h3>3순위 - 적용 지원</h3><ul><li>적용사례</li><li>실무적용지침</li><li>계산·사실관계 설명 보조</li><li>공식 본문과 구분하여 인용</li></ul></div>
+      <div class="rule-box"><h3>4순위 - 연구·해석</h3><ul><li>결론도출근거</li><li>소수의견</li><li>국제기준과의 관계</li><li>필요한 경우에만 검색</li></ul></div>
+      <div class="rule-box"><h3>기본 검색 제외</h3><ul><li>표지·저작권</li><li>목차·빈 페이지</li><li>제정경위·단순 편집정보</li><li>데이터에는 그대로 보존</li></ul></div>
+      <div class="rule-box"><h3>별도 관리</h3><ul><li>삭제 문단 표시</li><li>시행일·경과규정</li><li>문서 판본·시행일</li><li>과거 시험문제와 판본 일치 여부</li></ul></div>
+    </div>
+    <pre class="ascii">모든 내용 파싱·보존
+        |
+        +-- 공식 본문·부록 --------> 기본 검색 사용
+        +-- 사례·실무지침 ---------> 보조 검색 사용
+        +-- 결론도출근거·소수의견 -> 필요 시 사용
+        `-- 저작권·목차 ------------> 기본 검색 제외</pre>
+  </section>
+
+  <section class="panel design-section" id="parsing-model">
+    <h2>3. 파싱 구조와 분리 기준</h2>
+    <p class="goal">파싱 단계에서는 원문 구조를 손실 없이 보존하고, 검색용 크기 조절은 그 다음 청킹 단계에서 수행합니다.</p>
+    <pre class="ascii">HWPX 원문
+  |
+  |-- 1. 문서 영역(Zone) 분류
+  |-- 2. 제목 계층과 공식 문단번호 인식
+  |-- 3. 문단 내부의 본문·목록·표·각주 순서 보존
+  |-- 4. PDF 페이지 매핑과 신뢰도 기록
+  |-- 5. 원본 구조 JSON 생성
+  `-- 6. 별도의 검색용 Chunk 생성</pre>
+
+    <div class="rule-grid">
+      <div class="rule-box"><h3>기본 데이터 계층</h3><pre class="ascii">Document
+`-- Zone
+    `-- Chapter?       선택
+        `-- Section
+            `-- Subsection? 선택
+                `-- Paragraph
+                    `-- Block</pre></div>
+      <div class="rule-box"><h3>Block 유형</h3><ul><li><code>text</code>: 일반 본문</li><li><code>list_item</code>: ⑴·㈎·(1) 등의 하위 항목</li><li><code>table</code>: 표의 행·열·병합 셀</li><li><code>footnote</code>: 각주 표식과 내용</li><li><code>equation</code>: 계산식이 확인되는 경우</li></ul></div>
+    </div>
+
+    <h3 style="margin-top:18px">분리 우선순위</h3>
+    <pre class="ascii">1순위: 공식 문단번호 (예: 5.5.17, AG38A, B5.5.3)
+2순위: 장·절·본문 제목
+3순위: 하위 항목 표식 (⑴, ㈎, (1), 가.)
+4순위: HWPX 문단·스타일·들여쓰기 정보
+5순위: 글자 형태와 주변 문맥</pre>
+
+    <h3>표·각주 처리</h3>
+    <pre class="ascii">[Paragraph 5.5.17]
+|-- 본문 Block
+|-- 하위 항목 Block
+|-- HAS_TABLE ----> [Table 1109-T-015]
+`-- HAS_FOOTNOTE -> [Footnote 1109-F-027]
+
+표: 행·열·병합 셀·제목·주석·앞뒤 문단·PDF 페이지 보존
+각주: 표식 위치·내용·소속 문단·PDF 페이지를 양방향 연결</pre>
+
+    <h3>PDF 페이지 연결</h3>
+    <pre class="ascii">HWPX 문단 텍스트
+    |
+    |-- 띄어쓰기·줄바꿈 정규화
+    |-- PDF 페이지별 텍스트와 순차 비교
+    |-- 특징 문구·문단번호로 페이지 탐색
+    `-- pdf_page_start / pdf_page_end / confidence 저장
+
+신뢰도가 낮은 표·문단만 사람이 PDF 화면과 대조</pre>
+  </section>
+
+  <section class="panel design-section" id="chunking-policy">
+    <h2>4. 검색용 청킹 규칙</h2>
+    <p class="goal">원본 Paragraph 데이터는 그대로 두고 별도의 Chunk를 생성합니다. 일정 글자 수로 무조건 자르지 않습니다.</p>
+    <pre class="ascii">기본 단위: 공식 문단 1개
+|
+|-- 먼저 문단·소분류 길이 분포 측정
+|-- 짧은 문단: 자동 병합하지 않고 공식 문단 인용 경계 유지
+|-- 긴 문단: ⑴·㈎·(1) 등 하위 항목과 문장 경계에서 분할
+|-- 표: 표 전용 Chunk + 열 제목 반복
+|-- 각주: 관련 본문 Chunk에 문맥으로 포함
+|-- 정의: 독립 Chunk 유지
+`-- 예외: 원칙 문단과 그래프 관계로 연결</pre>
+    <div class="rule-grid">
+      <div class="rule-box"><h3>확정한 초기 문자 예산</h3><ul><li>문단 목표/최대: 900/1,200자</li><li>표 목표/최대: 1,200/1,800자</li><li>실제 전체 길이 분포를 근거로 설정</li><li>기계적인 overlap 대신 NEXT·계층 관계 사용</li></ul></div>
+      <div class="rule-box"><h3>모든 Chunk의 추적정보</h3><ul><li>기준서·판본·영역</li><li>장·절·제목 경로</li><li>원래 Paragraph·Subparagraph ID</li><li>분할 순서와 PDF 페이지</li><li>표·각주 ID</li><li>search_priority와 DERIVED_FROM</li></ul></div>
+    </div>
+    <p class="note"><strong>분리 원칙:</strong> Paragraph와 Subparagraph는 원문 그래프에 그대로 남고, Chunk는 검색을 위한 파생 노드입니다. 나중에 청킹 규칙을 바꾸더라도 원문 그래프를 다시 만들지 않도록 모든 Chunk를 <code>DERIVED_FROM</code>으로 원문에 연결합니다.</p>
+    <h3>전체 데이터 실행 결과</h3>
+    <div class="summary-grid">
+      <div class="metric"><strong>4,379개</strong><span>전체 Chunk</span></div>
+      <div class="metric"><strong>105개</strong><span>긴 문단 분할 Chunk</span></div>
+      <div class="metric"><strong>410개</strong><span>표 Chunk</span></div>
+      <div class="metric"><strong>4,144개</strong><span>기본 검색 대상</span></div>
+    </div>
+    <div class="rule-grid">
+      <div class="rule-box"><h3>실제 길이 분포</h3><ul><li>문단 중앙값 250자</li><li>95백분위 656자</li><li>99백분위 1,224자</li><li>1,200자 초과 문단 40개</li></ul></div>
+      <div class="rule-box"><h3>원문 추적 검증</h3><ul><li>문단 3,904개</li><li>소분류 2,125개</li><li>내용 Block 6,462개</li><li>표 362개·소속 각주 215개</li></ul></div>
+    </div>
+    <p class="note"><strong>산출물:</strong> <a href="data/chunks/chunks.jsonl">chunks.jsonl</a>, <a href="data/chunks/chunk_manifest.json">chunk_manifest.json</a>, <a href="data/chunks/CHUNK_QUALITY_REPORT.md">CHUNK_QUALITY_REPORT.md</a>. PDF 1,671쪽에서 문단 3,904/3,904와 검색 대상 문단 3,891/3,891, 검색 대상 Chunk 4,144/4,144를 매핑했습니다. 저신뢰도 101개와 복수 후보 216개를 포함한 검토 목록 287개를 생성했고 현재 전체 테스트 123개를 통과했습니다. 독립 감사에서 IE142 317~318쪽, KIFRS1032-T-0049 84~85쪽, 16C·35M·7.2.12 오탐, B3.2.17 절 제목 경계를 교정했으며 anchor 후보 페이지를 보존합니다.</p>
+  </section>
+
+  <section class="panel design-section" id="graph-model">
+    <h2>5. Neo4j 그래프 구조</h2>
+    <p class="goal">공식 문단을 중심으로 구조 관계와 의미 관계를 함께 저장합니다. 모든 문장을 노드로 만들어 그래프를 과도하게 키우지는 않습니다.</p>
+    <pre class="ascii">구조 계층
+[Standard] -CONTAINS-> [Zone] -CONTAINS-> [Chapter/Section] -CONTAINS-> [Paragraph]
+                                                                  |
+                                                                  +--HAS_TABLE----> [Table]
+                                                                  `--HAS_FOOTNOTE-> [Footnote]
+
+의미 계층
+[Paragraph/Block/Table] --MENTIONS--> [Concept]
+[Paragraph] --ESTABLISHES---> [Rule]
+[Rule]      --HAS_CONDITION-> [Condition]
+[Rule]      --HAS_EXCEPTION-> [Exception]
+[Example]   --ILLUSTRATES---> [Rule]
+[Appendix Paragraph] --EXPLAINS-> [Body Paragraph]
+
+기준서 간 연결
+[Paragraph] --REFERS_TO-> [다른 기준서 Paragraph]</pre>
+
+    <h3>원문 구조와 검색 구조의 분리</h3>
+    <pre class="ascii">[Paragraph] --CONTAINS------> [Subparagraph]
+[Subparagraph] --CONTAINS---> [더 하위 Subparagraph]
+[Chunk] --DERIVED_FROM-----> [Paragraph / Subparagraph / Table]
+
+[Chunk.embedding] ---------> Neo4j Vector Index
+[Chunk.text] --------------> Neo4j Full-text Index (cjk analyzer)</pre>
+
+    <h3>본문·부록·사례 연결 예시</h3>
+    <pre class="ascii">[본문 5.5.3] -----ESTABLISHES----> [기대신용손실 인식 Rule]
+      |                                      ^
+      `--MENTIONS--> [기대신용손실 Concept]   |
+                         ^                    |
+                         |                    |
+[부록 B5.5.3] --MENTIONS-+--EXPLAINS----------+
+                                              |
+[적용사례 IE12] ------------ILLUSTRATES--------+</pre>
+
+    <h3>서로 다른 기준서 연결 예시</h3>
+    <pre class="ascii">                         [금융상품 Concept]
+                                |
+        +-----------------------+-----------------------+
+        |                       |                       |
+        v                       v                       v
+[1109 인식·분류·측정]   [1032 표시]             [1107 공시]
+        |
+        `----------------> [1039 위험회피회계]
+
+[1109 문단] --REFERS_TO--> [1032 문단 11: 금융부채 정의]</pre>
+
+    <p class="note"><strong>노드 생성 원칙:</strong> 기준서·영역·절·공식 문단·번호가 있는 소분류·표·각주·검색 Chunk·주요 개념·규칙·조건·예외·사례를 노드 후보로 둡니다. 일반 문장은 원문 Block으로 유지하고, 독립 참조 대상이거나 중요한 판단조건일 때만 의미 노드로 승격합니다.</p>
+  </section>
+
+  <section class="panel design-section" id="relation-detection">
+    <h2>6. 같은 개념·적용사례·타 기준서 관계를 찾는 방법</h2>
+    <p class="goal">LLM에게 전부 맡기지 않습니다. 명시적 근거부터 자동 연결하고, 의미 관계는 후보 생성과 검증을 거칩니다.</p>
+    <pre class="ascii">1. 구조 연결
+   HWPX 계층·문단 순서로 CONTAINS / NEXT / HAS_TABLE / HAS_FOOTNOTE 생성
+                      |
+2. 명시적 참조
+   “제1032호 문단 11”, “문단 5.5.17 참조”를 규칙으로 추출하여 REFERS_TO 생성
+                      |
+3. 개념 후보
+   회계 용어사전 + 동의어 + 임베딩 유사도로 관련 문단 후보 생성
+                      |
+4. 의미 판단
+   OpenAI API가 DEFINES / EXPLAINS / CONDITION / EXCEPTION / ILLUSTRATES 후보 생성
+                      |
+5. 검증
+   실제 근거 문구·문단 존재·문맥·신뢰도를 확인하고 승인된 관계만 검색에 사용</pre>
+
+    <h3>4개 HWPX 실제 문단 참조 표현 조사 결과</h3>
+    <p class="note"><strong>조사 범위:</strong> 1032·1039·1107·1109호의 모든 HWPX section에서 <code>문단</code> 표현을 조사했습니다. 범위 기호는 총 476건이 확인됐습니다.</p>
+    <div class="table-wrap"><table><thead><tr><th>유형</th><th>실제 확인된 표현</th><th>처리 규칙</th></tr></thead><tbody>
+      <tr><td>단일 문단</td><td><code>문단 5.5.17</code>, <code>문단89⑵</code></td><td><code>문단</code> 뒤 공백 유무를 모두 허용하고 문단 또는 세부항목에 연결</td></tr>
+      <tr><td>범위</td><td><code>8~10</code>, <code>102D∼102I</code>, <code>BC220E–BC220G</code></td><td>기호를 내부적으로 <code>~</code>로 정규화한 뒤 실제 문단 순서표에서 범위를 펼침</td></tr>
+      <tr><td>복수 문단</td><td><code>33과 34</code>, <code>97, 98 또는 100</code>, <code>44R 및 B30</code></td><td>쉼표·과/와·및·또는·이나로 연결된 번호를 각각 별도 대상 문단으로 추출</td></tr>
+      <tr><td>세부항목</td><td><code>91⑵와 101⑵</code>, <code>9⑶, 10⑴</code></td><td>기본 문단과 REFERS_TO를 만들고 존재하는 하위 항목 Block에도 세부 대상 정보를 보존</td></tr>
+      <tr><td>특수 번호</td><td><code>한4.1</code>, <code>BA.2</code>, <code>BCE.174</code>, <code>AG105</code>, <code>BC24Y</code></td><td>공식 문단 ID 사전과 대조하여 접두어·점·영문 접미사를 유지</td></tr>
+      <tr><td>상대·일반 표현</td><td><code>해당 문단</code>, <code>이 문단</code>, <code>앞의 문단</code></td><td>번호가 없으므로 확정 REFERS_TO로 만들지 않고 구조 규칙으로 해석 가능한 경우만 후보로 저장</td></tr>
+    </tbody></table></div>
+    <p class="note"><strong>추가 방어 규칙:</strong> 현재 원문 범위에서는 ASCII <code>-</code>가 발견되지 않았지만, 사용자가 입력하거나 다른 판본에서 나타날 수 있으므로 <code>-</code>와 <code>～</code>도 같은 범위 기호로 지원합니다.</p>
+    <pre class="ascii">예: “문단 3.2.3-3.2.9”
+원문 보존: raw = "문단 3.2.3-3.2.9"
+범위 해석: start = 3.2.3, end = 3.2.9
+실제 문단표: 3.2.3 → 3.2.4 → 3.2.4A → ... → 3.2.9
+그래프 생성: 출발 문단에서 위의 실제 문단 각각으로 REFERS_TO
+검증 예외: 시작·끝 번호가 없으면 자동 생성하지 않고 unresolved 목록에 기록</pre>
+
+    <div class="rule-grid">
+      <div class="rule-box"><h3>A등급 - 확정 관계</h3><ul><li>기준서·문단번호 직접 언급</li><li>구조에서 확실한 소속 관계</li><li>프로그램으로 자동 생성</li><li>기본 GraphRAG에서 사용</li></ul></div>
+      <div class="rule-box"><h3>B등급 - 검증된 의미 관계</h3><ul><li>같은 핵심 개념</li><li>임베딩 유사도와 LLM 판단</li><li>근거 문구가 실제 원문에 존재</li><li>검증 후 GraphRAG에서 사용</li></ul></div>
+      <div class="rule-box"><h3>C등급 - 후보 관계</h3><ul><li>관련 가능성은 있으나 근거 부족</li><li>검토 목록으로 저장</li><li>기본 답변 검색에서는 제외</li><li>사람 승인 후 B등급 승격</li></ul></div>
+      <div class="rule-box"><h3>외부 기준서 참조</h3><ul><li>현재 4개 외 기준서도 참조 자체는 보존</li><li><code>ExternalStandard</code> 노드 생성</li><li>내용 미적재 상태 표시</li><li>나중에 기준서 추가 시 실제 문단과 연결</li></ul></div>
+    </div>
+
+    <p class="note"><strong>현재 구현 범위:</strong> 공식 용어 정의와 그 용어의 정확한 원문 출현은 자동 연결됩니다. 검색은 <code>원문 → Concept → 공식 정의 출처</code>까지만 확장해 고빈도 개념의 폭발을 막습니다. Concept는 탐색용 다리로만 쓰고 최종 답변 근거에서는 제외하며, 인용 가능한 정의표·정의 블록을 전달합니다. 번호 없이 같은 원칙을 간접 설명하는 Rule·Condition·Exception·Example은 아직 자동 승인하지 않으며 후속 OpenAI 후보 추출과 사람 검토가 필요합니다.</p>
+  </section>
+
+  <section class="panel design-section" id="retrieval-flow">
+    <h2>7. 확정된 Hybrid → Graph 직렬 검색 흐름</h2>
+    <pre class="ascii">사용자 질문
+    |
+    |-- 질문 목적·하위 질문·기준서·문단번호·회계 개념 후보 추출
+    |
+    |-- Hybrid 검색
+    |   |-- Sparse/Full-text(cjk): 한국어 용어·문단번호
+    |   |-- Dense/Vector: 표현이 달라도 의미가 유사한 문단
+    |   `-- RRF: 서로 다른 점수 대신 두 순위를 결합
+    |
+    |-- 상위 Chunk를 원문 Paragraph/Subparagraph Seed로 변환
+    |
+    |-- Graph 확장
+    |   |-- 정의·적용범위
+    |   |-- 조건·예외
+    |   |-- 본문과 부록 적용지침
+    |   |-- 적용사례
+    |   `-- 다른 기준서 참조 문단
+    |
+    |-- Seed별 근거 묶음 생성
+    |-- OpenAI 근거 묶음 재정렬
+    |-- 답변 전 근거 충분성 검사
+    |-- 부족하면 누락 부분만 최대 1회 재검색
+    |-- 답변 후 인용 검증
+    |
+    `-- 사용자 출력
+        |-- 결론
+        |-- 판단 과정
+        `-- 근거: 기준서·문단번호·PDF 페이지</pre>
+    <p class="note"><strong>핵심:</strong> Dense와 Sparse 검색이 자연어 질문에 가까운 원문 Seed를 찾고, GraphRAG가 그 Seed에 연결된 정의·조건·예외·적용지침·사례·타 기준서를 확장합니다. Hybrid와 Graph를 독립 병렬로 실행하지 않습니다.</p>
+
+    <div class="rule-grid">
+      <div class="rule-box"><h3>왜 직렬 구조인가</h3><ul><li>자연어와 그래프 엔터티명이 달라도 Seed를 찾기 쉬움</li><li>관련 없는 노드에서 탐색이 시작되는 위험 감소</li><li>Neo4j HybridCypherRetriever와 같은 검색 후 그래프 확장 방식</li><li>경로와 인용을 설명하기 쉬움</li></ul></div>
+      <div class="rule-box"><h3>그래프 영향력을 유지하는 방법</h3><ul><li>직접 참조·조건·예외 관계를 필수 후보로 확장</li><li>개별 Chunk가 아닌 그래프 근거 묶음을 재정렬</li><li>선택된 전체 경로와 관계 유형 보존</li><li>근거 충분성 검사에서 누락 관계 확인</li></ul></div>
+    </div>
+    <p class="note"><strong>설계 근거:</strong> Neo4j의 <a href="https://neo4j.com/docs/neo4j-graphrag-python/current/user_guide_rag.html">HybridCypherRetriever 공식 문서</a>는 벡터·전문 검색으로 유사 노드를 찾은 뒤 Cypher로 그래프를 확장합니다. Microsoft GraphRAG도 <a href="https://microsoft.github.io/graphrag/query/overview/">Local Search와 Global Search</a>를 구분하며, 전체 커뮤니티 보고서를 사용하는 Global Search는 데이터 전체를 묻는 광범위한 질문에 적합하고 비용이 큰 방식으로 설명합니다. 현재 제품은 정확한 문단·조건·예외가 필요한 지역 질의가 중심이므로 직렬 Local 확장을 기본으로 선택했습니다.</p>
+
+    <h3>관계별 hop 정책</h3>
+    <div class="table-wrap"><table><thead><tr><th>관계</th><th>기본</th><th>최대</th><th>중단 기준</th></tr></thead><tbody>
+      <tr><td>전체 허용 관계</td><td>1-hop</td><td>조건부 2-hop</td><td>결과 최대 40개, 방문 노드 재탐색 금지</td></tr>
+      <tr><td>명시적 참조</td><td>직접 대상 포함</td><td>REFERS_TO 경로는 2-hop 허용</td><td>범위 참조는 직접 Edge 사용</td></tr>
+      <tr><td>구조 관계</td><td>CONTAINS·HAS_BLOCK·HAS_TABLE·HAS_FOOTNOTE</td><td>세부 노드의 부모 복원 시 2-hop</td><td>2-hop frontier 최대 12개</td></tr>
+      <tr><td>NEXT</td><td>인접 원문 후보</td><td>질문어 일치 시 2-hop</td><td>문서 전체 연속 순회 금지</td></tr>
+    </tbody></table></div>
+    <p class="note"><strong>hop 의미:</strong> Edge 하나를 건너가면 1-hop입니다. Chunk에서 원문으로 가는 <code>DERIVED_FROM</code> 이동은 검색 자료를 원문 노드로 바꾸는 과정이므로 의미 hop 예산에서는 제외합니다.</p>
+
+    <h3>OpenAI 근거 묶음 재정렬</h3>
+    <pre class="ascii">입력: 최대 48개 통합 근거 후보 (실제 검증 15개)
+│
+├─ 질문 직접 관련성 40%
+├─ 기준서 권위성 20%
+├─ 직접 적용 근거성 30%
+└─ 명시적 참조·그래프 연결성 10%
+
+출력: 기본 상위 10개 + 항목별 점수 + 선택 이유
+실패: 입력 후보 순서를 유지하는 결정적 fallback</pre>
+    <p class="note"><strong>모델:</strong> <code>OPENAI_RERANK_MODEL=gpt-5.6-terra</code>를 사용합니다. 정확한 문단 원문 조회는 재정렬을 생략할 수 있습니다.</p>
+
+    <h3>근거 충분성 검사</h3>
+    <pre class="ascii">답변 전
+├─ 직접 답하는 공식 본문·부록 문단이 있는가?
+├─ 복합 질문의 각 하위 질문에 근거가 있는가?
+├─ 핵심 REFERS_TO 문단이 포함됐는가?
+├─ 주요 Condition·Exception이 누락되지 않았는가?
+├─ 사례·결론도출근거만 있고 규범적 본문이 빠지지 않았는가?
+└─ 필요한 외부 기준서 원문이 실제 적재돼 있는가?
+
+부족하면 missing_aspects만 최대 1회 재검색
+
+답변 후
+├─ 모든 주요 주장에 실제 문단이 연결되는가?
+├─ 인용 문단이 해당 주장을 실제로 지지하는가?
+└─ 존재하지 않는 기준서·문단번호를 만들지 않았는가?</pre>
+    <p class="note"><strong>커뮤니티 요약:</strong> 현재 기본 검색에서는 사용하지 않습니다. 전체 기준서의 큰 흐름을 묻는 광범위한 질문에 나중에 추가할 수 있지만, 생성된 커뮤니티 요약 자체를 최종 회계 근거로 인용하지는 않습니다.</p>
+  </section>
+
+  <section class="panel design-section" id="prototype-results">
+    <div class="phase-header"><div><h2>8. 1109호 파서 시제품 실행 결과</h2><p class="goal">실제 HWPX와 PDF를 이용해 구조 추출과 페이지 매핑을 실행한 결과입니다.</p></div><span class="badge done">✓ 자동 처리 완료</span></div>
+    <div class="summary-grid">
+      <div class="metric"><strong>2,188개</strong><span>식별한 문단 레코드</span></div>
+      <div class="metric"><strong>10개</strong><span>대표 검수 문단</span></div>
+      <div class="metric"><strong>30개</strong><span>대표 문단 하위 항목</span></div>
+      <div class="metric"><strong>6개 / 2개</strong><span>대표 문단 표 / 각주</span></div>
+    </div>
+    <pre class="ascii">대표 검수 범위
+|
+|-- 공식 본문: 3.2.6, 4.1.2, 5.2.3, 5.5.17
+|-- 부록 적용지침: B3.2.17, B4.1.13, B5.5.17
+`-- 적용사례: IE7, IE54, IE70
+
+검증 요소
+|-- 개정 추적: 삭제문구 제외·삽입문구 반영
+|-- 문단과 ⑴·㈎ 하위 항목
+|-- 표의 행·열·병합 셀과 소속 문단 ID
+|-- 각주 내용과 소속 문단 ID
+|-- 명시적인 기준서·문단 참조
+`-- PDF 페이지 범위와 매핑 신뢰도</pre>
+    <div class="rule-grid">
+      <div class="rule-box"><h3>생성 파일</h3><ul><li><a href="data/validation/parser_prototype_1109/sample_paragraphs.json">구조화 JSON</a></li><li><a href="data/validation/parser_prototype_1109/VALIDATION_REPORT.md">사용자 검수 리포트</a></li><li><a href="data/validation/parser_prototype_1109/source_manifest.json">원본 SHA-256 목록</a></li></ul></div>
+      <div class="rule-box"><h3>자동·시각 검증 결과</h3><ul><li>대표 문단 10/10 탐지</li><li>PDF 페이지 10/10 매핑</li><li>현재 전체 파서 테스트 10개 통과</li><li>대표 PDF 페이지 렌더링 대조 완료</li></ul></div>
+    </div>
+    <p class="note"><strong>검수 결과:</strong> 사용자가 원문과 JSON을 육안으로 대조해 이상 없음을 승인했고, 이 시제품을 네 기준서 전체 파서로 확장했습니다.</p>
+  </section>
+
+  <section class="panel design-section" id="full-parser-results">
+    <div class="phase-header"><div><h2>9. 네 기준서 전체 구조화 결과</h2><p class="goal">문서마다 다른 HWPX section 배치를 판정하고 모든 원문 블록과 명시적 참조를 JSONL로 생성한 결과입니다.</p></div><span class="badge done">✓ 완료</span></div>
+    <div class="summary-grid">
+      <div class="metric"><strong>3,904개</strong><span>번호가 있는 문단</span></div>
+      <div class="metric"><strong>8,533개</strong><span>보존한 원문 블록</span></div>
+      <div class="metric"><strong>7,450개</strong><span>추출한 명시적 참조</span></div>
+      <div class="metric"><strong>0개</strong><span>미파싱 숫자형 문단 후보</span></div>
+    </div>
+    <div class="rule-grid">
+      <div class="rule-box"><h3>구조 산출물</h3><ul><li><a href="data/processed/paragraphs.jsonl">문단 JSONL</a></li><li><a href="data/processed/blocks.jsonl">원문 블록 JSONL</a></li><li><a href="data/processed/tables.jsonl">표 JSONL</a></li><li><a href="data/processed/footnotes.jsonl">각주 JSONL</a></li></ul></div>
+      <div class="rule-box"><h3>참조·검증 산출물</h3><ul><li><a href="data/processed/references.jsonl">전체 참조 JSONL</a></li><li><a href="data/processed/unresolved_references.jsonl">대상 미확정 참조 JSONL</a></li><li><a href="data/processed/document_manifest.json">문서 매니페스트</a></li><li><a href="data/processed/QUALITY_REPORT.md">품질보고서</a></li></ul></div>
+    </div>
+    <p class="note"><strong>190개 대상 미확정 참조:</strong> 표현을 놓친 것이 아니라 현재 판본에서 삭제된 과거 문단, 중복 번호, 현재 문서에 없는 번호처럼 목적지를 자동 확정하면 위험한 경우입니다. 원문과 번호를 보존하고 기본 그래프 관계에서는 제외합니다.</p>
+  </section>
+
+  <section class="panel design-section" id="open-decisions">
+    <h2>10. 확정된 결정과 바로 다음 작업</h2>
+    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>사용자 원문 검수:</strong> 대표 문단 10개의 JSON과 PDF 페이지 대조 결과 이상 없음으로 승인됐습니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>전체 파서:</strong> 문서별 본문 경계, 앞부분 보존, 범위·복수·세부항목 참조와 실제 문단 범위 확장을 구현했습니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>검색용 청킹:</strong> 원문 Block 순서와 하위항목·continuation·표를 보존한 4,379개 Chunk와 품질보고서를 생성했습니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>PDF 페이지:</strong> 검색 대상 Chunk 4,144/4,144개에 페이지를 연결했고, 저신뢰·복수 후보는 검토 목록 287개로 분리했습니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>Neo4j 스키마·적재:</strong> 원문·Chunk 구조와 A등급 참조 관계 74,409개를 로컬 DB에 적재하고 인덱스·검증을 통과했습니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>임베딩·Hybrid 검색:</strong> 4,144개 Chunk.embedding과 Dense+CJK Sparse+weighted RRF 검색·CLI를 구현했습니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>Graph 확장·재정렬:</strong> Hybrid Seed에서 구조·참조 그래프를 제한적으로 확장하고 통합 후보를 OpenAI Structured Output으로 재정렬합니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>질문 분석:</strong> 질문 유형을 분류하지 않고 명시된 기준서·문단을 보존하며 검색 질의·개념·하위 질문만 구조화합니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>충분성·재검색:</strong> 결정적 검사와 의미 검사를 통과한 근거만 사용하고, 누락 측면이 있으면 최대 1회만 보완 검색합니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 단일화</span><span><strong>답변 경로:</strong> 질문 유형 라우팅을 제거했습니다. 모든 질문은 동일한 검색·충분성 검사·일반 답변 생성·인용 검증 경로를 사용합니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>FastAPI:</strong> <code>/health</code>와 <code>/v1/ask</code>, 요청·응답 검증과 안전한 오류 처리를 구현했습니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 확인</span><span><strong>실제 질의:</strong> ECL 일반 질문과 객관식 형태 모두 단일 답변 경로에서 기준서 근거와 함께 응답했습니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>제품 UI:</strong> 질문·답변·원문·PDF 페이지·Hybrid/Graph 출처·hop·관계 경로와 처리 상태를 보여주는 반응형 화면을 구현했습니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>검색 구조:</strong> Dense+Sparse RRF로 Seed를 찾고 Neo4j 그래프를 확장하는 직렬 구조로 확정했습니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>재정렬:</strong> OpenAI gpt-5.6-terra가 개별 Chunk가 아닌 그래프 근거 묶음을 재정렬합니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>Graph hop:</strong> 허용 관계만 기본 1-hop, 명시적 참조·세부노드 부모 복원·질문어 일치 시 최대 2-hop이며 결과 40개·frontier 12개로 제한합니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 개념 KG 완료</span><span><strong>의미 KG:</strong> 공식 정의 기반 Concept 45개와 MENTIONS 17,712개를 Neo4j에 적재했습니다. 규칙·조건·예외·사례 자동 KG는 최종 범위에서 제외했습니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>Neo4j 환경:</strong> 로컬로 개발하고 최종제품 완성 후 필요 시 Aura로 이전합니다.</span></div>
+    <div class="status-line"><span class="badge done">✓ 완료</span><span><strong>평가 범위:</strong> 자동 벤치마크와 네 방식 비교는 구현하지 않고 사용자가 직접 평가합니다.</span></div>
+    <div class="callout" style="margin-top:16px">
+      <h3>현재 진행 상태</h3>
+      <p>파싱·페이지 매핑·구조/참조 그래프·공식 Concept KG·임베딩·Hybrid → Graph → 재정렬·충분성·1회 재검색·단일 답변·인용 검증·FastAPI·제품 UI가 완료되었습니다. 추가 의미 KG, 자동 테스트, 운영 로그는 향후 선택 사항입니다. 현재는 10단계 무료 클라우드 배포(Aura Free + HF Spaces + Cloudflare Pages)를 진행 중이며, 배포 준비 코드(CORS·요청 제한·Dockerfile·프론트 번들)는 완료되고 계정 생성·데이터 적재·실제 배포가 남아 있습니다.</p>
+    </div>
+  </section>
+
+  <footer>
+    <p>이 문서는 현재 확인된 사실만 완료로 표시합니다. 이후 구현이 끝날 때마다 해당 작업의 상태와 완료 기준을 함께 갱신합니다.</p>
+  </footer>
+</main>
+<script>
+  const buttons = [...document.querySelectorAll('.phase-button')];
+  const details = [...document.querySelectorAll('.phase-detail')];
+
+  function showPhase(phase) {
+    buttons.forEach((button) => {
+      button.setAttribute('aria-selected', String(button.dataset.phase === phase));
+    });
+    details.forEach((detail) => {
+      detail.classList.toggle('hidden', detail.dataset.detail !== phase);
+    });
+    const selected = details.find((detail) => detail.dataset.detail === phase);
+    if (selected) selected.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  buttons.forEach((button) => {
+    button.addEventListener('click', () => showPhase(button.dataset.phase));
+  });
+
+  const taskRows = [...document.querySelectorAll('#phaseDetails tbody tr')];
+  const doneRows = taskRows.filter((row) => row.querySelector('.badge.done'));
+  const percent = taskRows.length ? Math.round((doneRows.length / taskRows.length) * 100) : 0;
+  document.getElementById('progressBar').style.width = `${percent}%`;
+  document.getElementById('progressText').textContent = `전체 체크리스트 ${taskRows.length}개 중 ${doneRows.length}개 완료 (${percent}%). 질문 분석부터 검증된 답변, FastAPI와 제품 UI까지 완료했습니다.`;
+</script>
+</body>
+</html>
