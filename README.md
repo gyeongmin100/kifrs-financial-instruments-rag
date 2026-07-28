@@ -1,16 +1,35 @@
-# K-IFRS Financial Instruments RAG
+# K-IFRS Financial Instruments QA
 
-K-IFRS 금융상품 기준서 4개(제1032호·제1039호·제1107호·제1109호)를 구조화해 **Neo4j 하나**에 적재하고, 기준서 원문에 근거해서만 답하는 질의응답 시스템입니다.
+K-IFRS 제1032호·제1039호·제1107호·제1109호를 구조화해 Neo4j에 적재하고, 기준서 원문에 근거해서만 답하는 금융상품 질의응답 서비스입니다.
 
-라이브 서비스: https://accounting-rag.pages.dev
+라이브: https://accounting-rag.pages.dev
 
-이 저장소는 **RAG 구현부**만 담고 있습니다 (웹 UI·API 계층 제외).
+## 서비스 화면
 
-LangChain·LangGraph 없이 Neo4j Driver와 OpenAI SDK를 직접 호출합니다. 이유는 [아래](#프레임워크를-쓰지-않은-이유)에 정리했습니다.
+<img src="docs/images/service-home.png" alt="AI Accountant 서비스 첫 화면" width="100%">
 
-## 질의 흐름
+## 실제 사례 — 2026 CPA 1차 회계학
 
-단계 3개, OpenAI 호출 2회(임베딩 1 + 생성 1), 거절 게이트 0개입니다.
+아래는 2026년 공인회계사 제1차시험 회계학의 금융상품 관련 문항입니다. 금융부채의 계약조건 변경 시 제거조건 충족 여부에 따라 당기손익이 얼마나 감소하는지를 묻습니다.
+
+<p align="center">
+  <img src="docs/images/cpa-2026-financial-instruments-question.png" alt="2026 CPA 1차 회계학 금융상품 문제" width="500">
+</p>
+
+동일한 문제 이미지를 범용 GPT와 AI Accountant에 각각 입력했습니다.
+
+| 범용 GPT | AI Accountant |
+|---|---|
+| **⑤를 선택** | **③을 선택 — 정답** |
+| <img src="docs/images/gpt-answer.png" alt="범용 GPT가 5번을 선택한 답변" width="520"> | <img src="docs/images/ai-accountant-answer.png" alt="AI Accountant가 정답 3번을 선택한 답변" width="520"> |
+
+범용 GPT는 ⑤를 답으로 제시했지만, AI Accountant는 검색한 K-IFRS 근거와 계산 과정을 제시하며 정답인 ③을 선택했습니다. 문제지에는 ③과 ⑤의 금액 조합이 동일하게 중복 표기되어 있으며, 정답 번호는 ③입니다.
+
+> 이 결과는 위 문항에 대한 단일 비교 사례입니다. 모든 회계 문제에서 동일한 정확도를 보장하지는 않습니다.
+
+## 한눈에 보는 질의 흐름
+
+질문 하나가 처리되는 전체 경로입니다. 단계가 셋뿐이고 OpenAI 호출은 **임베딩 1회 + 답변 생성 1회**입니다.
 
 ```text
 질문
@@ -23,91 +42,66 @@ LangChain·LangGraph 없이 Neo4j Driver와 OpenAI SDK를 직접 호출합니다
  ▼ ② 형제 청크 보강                       retrieval/pipeline.py
  │     같은 Paragraph에서 나온 나머지 Chunk를 최대 8개까지 덧붙임
  │
- ▼ ③ 답변 생성                            generation/answer.py
+ ▼ ③ 답변 생성 (OpenAI Structured Output)  generation/answer.py
  │     근거로 답할 수 없으면 모델이 결론을 '근거 부족:'으로 시작
  │
  ▼ 결론 / 판단 과정 / 근거
 ```
 
-## 이 프로젝트에서 실제로 배운 것
+**게이트가 없습니다.** 이전에는 기계 판정 6종, 의미 판정 LLM, 근거 필터, 인용 검증까지 네 개의 거절 지점이 있었고 정상 질문의 60%가 기각됐습니다. 지금은 "답할 수 있는지"를 답변 모델 하나가 판단하고, 그 판단을 **되돌리는 코드가 없습니다.**
 
-처음에는 게이트 4개(기계 판정 6종 · 의미 판정 LLM · 근거 필터 · 인용 검증)와 LLM 호출 최대 12회짜리 파이프라인이었습니다. **정상 질문의 60%가 기각됐습니다.**
+### 왜 이렇게 바꿨나
 
-라이브 백엔드에 질문 6개를 던져 원인을 찾았습니다.
+| 문제 | 원인 | 조치 |
+|---|---|---|
+| 정상 질문의 60%가 기각 | 의미 판정 프롬프트가 "예외까지 전부 커버"를 요구. K-IFRS는 어떤 주제든 예외가 딸려 있어 상위 12개 청크로는 절대 충족 불가 | 판정 단계 제거 |
+| 같은 질문이 실행마다 다른 결과 | 기계 판정이 재정렬 LLM의 점수에 의존했는데 `temperature` 미설정이라 점수가 흔들림 | 재정렬 제거 |
+| LLM 호출 최대 12회 | 질문 분석 1 + 재정렬 4×2 + 판정 1×2 + 답변 1 | 1회 |
 
-**원인 A — 판정 프롬프트가 완전성을 요구했다**
+같은 질문 6개로 측정한 결과 **답변 성공 2/6 → 5/6**. 범위 밖 질문("오늘 서울 날씨")은 여전히 거절합니다.
 
-```text
-Return sufficient=true only when all material claims, conditions,
-and exceptions needed for a grounded answer are covered.
+## 헛소리를 막는 장치 — 검사하지 않고, 물어보지 않는다
+
+출처를 지어내지 못하게 하는 방법은 두 가지입니다. 모델에게 물어본 뒤 대조하거나, **아예 묻지 않거나.** 두 번째를 택했습니다.
+
+모델이 돌려주는 것은 세 가지뿐입니다.
+
+```json
+{
+  "conclusion": "금융자산은 현금과 지분상품을 포함한다. [E2]",
+  "reasoning": ["문단 11이 금융자산을 열거한다. [E2]"],
+  "evidence": ["E2"]
+}
 ```
 
-모델은 시킨 대로 했습니다. 실제 기각 사유:
+`evidence`는 **번호 목록**입니다. 출처(`citation`)와 원문(`statement`)은 검색 단계에서 우리가 만든 근거 목록에서 `E2`를 조회해 채웁니다. 모델의 출력을 쓰지 않으므로 **변조될 통로 자체가 없습니다.**
 
-> "문단 16A~16D의 예외적 지분분류의 **모든 특성 및 구체적 조건**이 제공되지 않았다"
+`generation/answer.py`의 `_assemble_answer()`가 이 조립을 담당하며, 거절하거나 폐기하지 않습니다.
 
-K-IFRS는 어떤 주제든 예외 규정이 딸려 있습니다. 상위 10개 청크에 그게 전부 들어올 일이 없으니 구조적으로 통과가 불가능했습니다.
+- 모르는 번호(`E9`)를 말하면 **그 항목만** 버리고 답변은 살립니다
+- 본문에 `[E1]`을 썼는데 목록에서 빠뜨렸으면 마커에서 찾아 카드를 만듭니다
+- 문장에 인용이 없어도 답변을 버리지 않습니다
 
-**원인 B — 같은 질문이 실행마다 다른 결과를 냈다**
+### 이전 방식과 무엇이 달랐나
 
-```text
-"위험회피회계를 적용하기 위한 요건은?"
-  1차 → insufficient / deterministic_failed / 근거 0
-  2차 → answered / sufficient / 완전한 4단락 답변
-```
+검사 6종을 두고 하나라도 어긋나면 답변 전체를 폐기했습니다. 실측 결과 **14개 질문 중 3개가 이 검사 때문에 죽고 있었습니다.**
 
-기계 판정이 재정렬 LLM의 점수에 의존했는데, LLM 호출 5곳 어디에도 `temperature`·`seed`·`top_p` 설정이 없었습니다.
-
-**조치 — 임계값 재조정 대신 판정 단계 제거**
-
-답변 생성 프롬프트에 이미 자체 거절 규칙이 있었습니다.
-
-```text
-5. 결론에 필요한 조건, 예외 또는 사실관계가 부족하면 단정하지 않는다.
-   그 문장은 '근거 부족:'으로 시작하여 무엇이 부족한지 구체적으로 밝힌다.
-```
-
-| | 이전 | 현재 |
+| 질문 | 모델이 실제로 한 일 | 검사 결과 |
 |---|---|---|
-| LLM 호출 | 최대 12회 | **1회** |
-| 거절 게이트 | 4개 | **0개** |
-| 검색 단계 | 6단계 | **2단계** |
-| 코드 | — | **약 1,400줄 제거** |
-| 답변 성공 (동일 질문 6개) | **2/6** | **5/6** |
+| 법인세비용 계산 | 근거 3개를 인용하며 "제1012호 소관"이라 정확히 안내 | 문장 하나에 마커 없음 → **전체 폐기** |
+| 오늘 서울 날씨 | "제공된 근거는 K-IFRS 금융상품 내용"이라 구체적으로 거절 | 접두사 불일치 → **전체 폐기** |
 
-| 질문 | 이전 | 현재 |
-|---|---|---|
-| 금융자산 상각후원가 측정 조건 | answered | answered |
-| 위험회피회계 적용 요건 | deterministic_failed | **answered** |
-| 기대신용손실 (키워드 한 단어) | semantic_insufficient | **answered** |
-| 금융부채랑 자본 어떻게 구분해? | semantic_insufficient | **answered** |
-| 금융자산의 정의 | — | answered |
-| 오늘 서울 날씨 어때? | 거절 | **거절** (정상) |
+폐기된 답변은 모두 `근거 부족: 검증된 답변을 생성하지 못했습니다.`라는 똑같은 문구로 대체됐습니다. 모델이 한 유용한 설명이 버려진 것입니다.
 
-마지막 행이 중요합니다. **범위 밖 질문은 여전히 걸러집니다.** 기각률이 낮아진 것이지 아무거나 답하게 된 것이 아닙니다.
+**바꾼 뒤 같은 14개 질문에서 검증으로 폐기된 답변은 0건입니다.**
 
-제거한 모듈: `reranker.py`(289줄) · `sufficiency.py`(357줄) · `citation_verifier.py`(181줄) · `graph_expansion.py`(355줄) · `query/analysis.py`(193줄)
+### 거절 판정
 
-## 헛소리를 막는 장치
-
-게이트를 없앴다고 검증이 사라진 것은 아닙니다. `generation/answer.py`의 `_validate_answer()`가 모델 출력을 받자마자 결정적으로 검사합니다.
-
-| # | 검사 | 실패 예 |
-|---|---|---|
-| 1 | 최상위 키가 정확히 `conclusion`·`reasoning`·`evidence` 셋 | 필드 추가/누락 |
-| 2 | 모든 `evidence_id`가 제공한 카탈로그에 존재 | 없는 E9를 지어냄 |
-| 3 | `citation` 문자열이 제공값과 **정확히** 일치 | 출처명을 임의로 바꿈 |
-| 4 | `evidence_id` 중복 없음 | 같은 근거 두 번 |
-| 5 | 결론·판단과정의 모든 문장에 `[E1]` 인용 | 근거 없는 단정 |
-| 6 | 인용한 ID 집합 == 반환한 근거 ID 집합 | 안 쓴 근거를 끼워 넣음 |
-
-하나라도 어긋나면 `_fallback()`이 실행되어 생성 답변을 버립니다. **검증되지 않은 문장은 사용자에게 도달하지 않습니다.**
-
-인용 검증을 "없앤" 것이 아니라 별도 모듈에서 생성 직후로 옮긴 것입니다.
+근거를 하나도 인용하지 않으면 표현과 무관하게 근거 부족으로 봅니다. 접두사(`근거 부족:`)만 믿으면 모델이 "답변할 수 없습니다" 같은 다른 말로 거절했을 때 정상 답변으로 잘못 분류됩니다.
 
 ## 하위항목(⑴ → ㈎ → ①)을 다루는 방식
 
-기준서 문단은 계층적 하위항목을 갖습니다. 검색 시점에 그래프로 부모를 복원할 수도 있었지만, **청킹 단계에서 이미 해결되어 있어 불필요**했습니다.
+기준서 문단은 계층적 하위항목을 갖습니다. 이걸 검색 시점에 그래프로 복원하지 않고 **청킹 단계에서 이미 해결**했습니다.
 
 ```text
 청크 KIFRS1032-11-C01 (834자, 원문 노드 17개를 덮음)
@@ -126,15 +120,15 @@ K-IFRS는 어떤 주제든 예외 규정이 딸려 있습니다. 상위 10개 �
       ③ 자기지분상품을 미래에 수취하거나 인도하기 위한 계약인 금융상품
 ```
 
-Neo4j 실측 근거:
+Aura 실측 근거:
 
 | 확인 항목 | 값 |
 |---|---|
-| `Subparagraph -CONTAINS-> Subparagraph` 중첩 | **0건** (파서가 평탄화, 깊이 1뿐) |
-| 청크당 `DERIVED_FROM` 엣지 | **최소 2개** (조각만 담은 청크 없음) |
+| `Subparagraph -CONTAINS-> Subparagraph` 중첩 | **0건** (파서가 평탄화, 깊이는 1뿐) |
+| 청크 하나가 덮는 원문 노드 수 | **최소 2개** (조각만 담은 청크가 없음) |
 | 한 문단이 청크 1개에 온전히 들어간 비율 | **3,701 / 3,831 = 96.6%** |
 
-**남은 3.4%가 형제 청크 보강(②단계)의 이유입니다.** 문단이 길면 크기 제한 때문에 여러 청크로 갈리는데, 그때 뒷부분만 검색에 걸리면 앞부분 없이 답변이 만들어집니다.
+**남은 3.4%가 형제 청크 보강(②단계)의 존재 이유입니다.** 문단이 길면 크기 제한 때문에 여러 청크로 갈리는데, 그때 뒷부분만 검색에 걸리면 앞부분 없이 답변이 만들어집니다. `DERIVED_FROM`으로 같은 `Paragraph`를 공유하는 청크를 끌어와 메웁니다.
 
 ```cypher
 MATCH (hit:Chunk)-[:DERIVED_FROM]->(p:Paragraph)<-[:DERIVED_FROM]-(sibling:Chunk)
@@ -143,82 +137,72 @@ WHERE hit.chunk_id IN $chunk_ids
   AND NOT sibling.chunk_id IN $chunk_ids
 ```
 
-그래프 확장 355줄이 이 4줄로 대체됐습니다.
-
-## Hybrid 검색
-
-Dense와 Sparse의 원점수는 스케일이 달라 직접 비교하지 않고 순위만 결합합니다.
-
-```python
-item["rrf_score"] += weight / (rrf_k + rank)     # rrf_k = 60
-```
-
-- **Dense**: `text-embedding-3-large` 3,072차원 → Neo4j Vector Index (cosine)
-- **Sparse**: Neo4j Full-text Index, **`cjk` analyzer**. `standard-no-stop-words`는 한국어 질의에서 관련 없는 결과를 반환하는 것이 실측되어 사용하지 않습니다.
-- 두 채널 모두 `searchable=true AND inactive=false` 필터를 적용합니다. Neo4j 전문 인덱스 자체는 이 조건을 강제하지 않습니다.
-
-`normalize_standard_id()`가 `1109` · `KIFRS1109` · `제1109호`를 모두 `"1109"`로 정규화하고, `escape_lucene_query()`가 Lucene 연산자만 이스케이프하며 한국어와 공백은 보존합니다.
-
-## 색인 파이프라인
-
-```text
-HWPX 원본 4개
- ▼ parse_all_standards.py     문단·블록·표·각주·참조 추출
- ▼ map_pdf_pages.py           PDF 1,671쪽과 문단 매핑
- ▼ build_chunks.py            검색용 Chunk 생성
- ▼ build_embeddings.py        3,072차원 임베딩
- ▼ build_semantic_kg.py       공식 정의 기반 Concept·MENTIONS
- ▼ load_neo4j.py / load_semantic_neo4j.py / load_embeddings_neo4j.py
-```
-
-각 단계마다 `validate_*.py`가 짝으로 있고 품질 보고서를 남깁니다.
-
-### 청킹 정책
-
-3,904개 문단 실측 분포를 근거로 임계값을 정했습니다.
-
-| 지표 | 값 |
-|---|---:|
-| 문단 원문 길이 중앙값 | 250자 |
-| 95백분위 | 656자 |
-| 99백분위 | 1,224자 |
-| 소분류 | 2,125개 |
-| 가장 긴 문단 | 4,554자 |
-
-문단 목표/최대 **900/1,200자**, 표 목표/최대 **1,200/1,800자**. 긴 문단은 Block·Subparagraph 경계에서, 표는 행 경계에서 분할합니다. **짧은 문단도 자동 병합하지 않습니다** — 문단 인용 경계를 유지하기 위해서입니다.
-
-## 데이터 현황 (Neo4j 실측)
-
-노드 22,018개 · 관계 92,121개 · 검색 대상 Chunk 4,144개
-
-| 노드 | 개수 | | 관계 | 개수 | 질의에 사용 |
-|---|---:|---|---|---:|:---:|
-| Block | 8,533 | | APPEARS_ON | 19,968 | |
-| Chunk | 4,379 | | MENTIONS | 17,712 | |
-| Paragraph | 3,904 | | **DERIVED_FROM** | 14,087 | **○** |
-| Subparagraph | 2,125 | | REFERS_TO | 12,796 | |
-| PdfPage | 1,671 | | NEXT | 11,435 | |
-| Section | 713 | | CONTAINS | 8,433 | |
-| Table | 362 | | HAS_BLOCK | 6,674 | |
-| Footnote | 227 | | HAS_TABLE | 574 | |
-| Concept | 45 | | HAS_FOOTNOTE | 442 | |
-
-**질의 시점에 읽는 것은 인덱스 2개(`chunk_embedding_vector`, `chunk_fulltext`)와 관계 1종(`DERIVED_FROM`)뿐입니다.** 나머지 그래프는 적재·검증되어 있지만 현재 검색 경로에서 사용하지 않으며, 원문 추적과 향후 확장을 위한 자산입니다.
+형제까지 합쳐도 평균 1,283자, p95 3,326자, 최대 6,250자라 컨텍스트 예산 안에 들어옵니다.
 
 ## 프레임워크를 쓰지 않은 이유
 
-파이프라인이 분기 없는 3단계 직선이고 상태 전이가 없습니다. 프레임워크가 주는 추상화보다 호출 지점을 직접 보는 편이 디버깅에 유리합니다.
+LangChain·LangGraph 없이 Neo4j Driver와 OpenAI SDK를 직접 호출합니다. 파이프라인이 분기 없는 3단계 직선이고 상태 전이도 없어, 프레임워크가 주는 추상화보다 호출 지점을 직접 보는 편이 디버깅에 유리합니다. 실제로 "왜 기각되는가"를 추적할 때 각 호출의 입출력을 그대로 볼 수 있어 원인을 빠르게 찾았습니다.
 
-실제로 "왜 기각되는가"를 추적할 때 각 LLM 호출의 입출력을 그대로 볼 수 있어 위의 원인 A·B를 빠르게 찾았습니다. 프레임워크 내부에 감싸여 있었다면 프롬프트 문구 하나와 `temperature` 미설정이 원인이라는 걸 알아내기 더 어려웠을 것입니다.
+## 데이터 현황 (Neo4j AuraDB Free 실측)
 
-LLM이 임의의 Cypher를 생성하게 하지 않습니다. 검색은 관계 유형·방향·깊이가 고정된 Cypher 템플릿만 씁니다.
+노드 22,018개 · 관계 92,121개 · 검색 대상 Chunk 4,144개
 
-## 실행
+| 노드 | 개수 | | 관계 | 개수 |
+|---|---:|---|---|---:|
+| Block | 8,533 | | APPEARS_ON | 19,968 |
+| Chunk | 4,379 | | MENTIONS | 17,712 |
+| Paragraph | 3,904 | | DERIVED_FROM | 14,087 |
+| Subparagraph | 2,125 | | REFERS_TO | 12,796 |
+| PdfPage | 1,671 | | NEXT | 11,435 |
+| Section | 713 | | CONTAINS | 8,433 |
+| Table | 362 | | HAS_BLOCK | 6,674 |
+| Footnote | 227 | | HAS_TABLE | 574 |
+| Concept | 45 | | HAS_FOOTNOTE | 442 |
+| ExternalStandard | 35 | | | |
+| Zone | 20 | | | |
+| Standard | 4 | | | |
 
-```bash
+인덱스 3개 모두 ONLINE: `chunk_embedding_vector`(VECTOR, 3072차원 cosine) · `chunk_fulltext`(FULLTEXT, `cjk` analyzer) · `concept_fulltext`(FULLTEXT)
+
+**질의 시점에 사용하는 것은 `chunk_embedding_vector`, `chunk_fulltext`, `DERIVED_FROM` 세 가지뿐입니다.** 나머지 그래프(REFERS_TO, MENTIONS, Concept 등)는 적재·검증되어 있지만 현재 검색 경로에서는 읽지 않습니다. 색인 파이프라인의 산출물이자 향후 확장 여지로 남아 있습니다.
+
+## 색인 파이프라인 (질의와 별개, 사전 1회 실행)
+
+```text
+HWPX 원본 4개
+ ▼ parse_all_standards.py     문단·블록·표·각주·참조 추출 → data/processed/
+ ▼ map_pdf_pages.py           PDF 1,671쪽과 문단 매핑
+ ▼ build_chunks.py            검색용 Chunk 생성 → data/chunks/
+ ▼ build_embeddings.py        text-embedding-3-large 3,072차원 → data/embeddings/
+ ▼ build_semantic_kg.py       공식 정의 기반 Concept·MENTIONS → data/semantic/
+ ▼ load_neo4j.py / load_semantic_neo4j.py / load_embeddings_neo4j.py
+```
+
+각 단계마다 `validate_*.py`가 짝으로 있고, 품질 보고서를 `data/**/*_QUALITY_REPORT.md`에 남깁니다.
+
+## 배포 구성
+
+| 계층 | 서비스 | 주의사항 |
+|---|---|---|
+| 프론트엔드 | Cloudflare Pages | 정적 자산 업로드. FastAPI 라우트가 없으므로 `/favicon.ico` 같은 서버 경로에 의존하면 안 됨 |
+| 백엔드 | Render 무료 (Docker) | 15분 유휴 시 슬립 → 첫 요청 최대 1분 |
+| 데이터베이스 | Neo4j AuraDB Free | 3일 미사용 시 일시정지, 30일 지속 시 삭제 |
+
+Hugging Face Spaces를 먼저 검토했으나 Docker Space가 유료 전용으로 바뀌어 Render로 변경했습니다. 절차는 `DEPLOYMENT.md`를 참고하세요.
+
+## 로컬 실행
+
+```powershell
 pip install -e .
-cp .env.example .env    # OpenAI 키와 Neo4j 접속정보 입력
+Copy-Item .env.example .env    # OpenAI 키와 Neo4j 접속정보 입력
+python scripts/run_api.py      # http://127.0.0.1:8000/
+```
 
+필수 환경변수는 `NEO4J_URI` · `NEO4J_USERNAME` · `NEO4J_PASSWORD` · `NEO4J_DATABASE` · `OPENAI_API_KEY` · `OPENAI_EMBEDDING_MODEL` · `OPENAI_CHAT_MODEL` 입니다. 재정렬 모델을 제거해 `OPENAI_RERANK_MODEL`은 더 이상 쓰지 않습니다.
+
+## CLI
+
+```powershell
 # 검색만 확인 (OpenAI는 임베딩 1회만 호출)
 python scripts/query_retrieval.py "기대신용손실은 언제 인식하는가?"
 
@@ -228,53 +212,45 @@ python scripts/ask.py "위험회피회계를 적용하기 위한 요건은?" --d
 
 `query_retrieval.py`는 각 청크의 `candidate_source`가 `hybrid`인지 `sibling`인지 표시하므로, 형제 보강이 실제로 무엇을 끌어왔는지 볼 수 있습니다.
 
-필수 환경변수: `NEO4J_URI` · `NEO4J_USERNAME` · `NEO4J_PASSWORD` · `NEO4J_DATABASE` · `OPENAI_API_KEY` · `OPENAI_EMBEDDING_MODEL` · `OPENAI_CHAT_MODEL`
+## API
 
-## 설정
+| 엔드포인트 | 용도 |
+|---|---|
+| `GET /health` | 상태 확인 |
+| `POST /v1/ask` | 동기 질의. 응답이 올 때까지 연결 유지 |
+| `POST /v1/jobs` | 비동기 질의 접수 → `202` + `job_id` |
+| `GET /v1/jobs/{id}` | 결과 폴링 (`pending` / `complete` / `error`) |
+| `DELETE /v1/jobs/{id}` | 작업 폐기 |
 
-`config/retrieval.yaml`
+웹 UI는 콜드 스타트(최대 1분)를 견디려고 비동기 job 경로를 씁니다. 응답의 `status`·`reason` 조합은 다음 셋뿐입니다.
 
-```yaml
-hybrid:
-  dense_top_k: 20        # Dense 벡터 검색 후보
-  sparse_top_k: 20       # Sparse 전문 검색 후보
-  seed_top_k: 12         # RRF 결합 후 상위
-  rrf_k: 60
-retrieval:
-  top_k: 12              # 답변 생성기로 넘길 seed 수
-  max_siblings: 8        # 형제 청크 보강 상한
-```
-
-`config/answering.yaml`
-
-```yaml
-answer:
-  max_candidates: 20        # ★ top_k + max_siblings 이상이어야 함
-  max_context_chars: 14000  # ★ 실질적 상한. 이 값이 먼저 걸린다
-```
-
-**`max_candidates`가 `top_k + max_siblings`보다 작으면 형제 청크가 잘려 나가 보강이 무의미해집니다.**
+| status | reason | 의미 |
+|---|---|---|
+| `answered` | `sufficient` | 근거에 기반한 답변 |
+| `insufficient` | `self_declined` | 모델이 근거로 답할 수 없다고 밝힘 |
+| `insufficient` | `no_evidence_found` | 검색이 아무 문단도 반환하지 않음 |
 
 ## 알려진 한계
 
-- **인용 검증이 형식만 봅니다.** `evidence_id` 존재와 `citation` 일치는 확인하지만, 답변 문장이 근거 원문의 내용과 실제로 일치하는지는 검증하지 않습니다.
-- **표현을 바꿔 인용하는 것은 허용됩니다.** 의미를 왜곡한 요약은 걸러지지 않습니다.
-- **답변이 근거 범위를 넘는지 판단할 장치가 없습니다.** 이전의 의미 판정이 그 역할을 일부 했지만 기각률이 너무 높아 제거했습니다.
-- **결과에 변동성이 있습니다.** 답변 생성 LLM에 `temperature`를 설정하지 않았습니다. 재정렬 제거로 변동 폭은 크게 줄었지만 0은 아닙니다.
-- **정의 질문의 검색 편향.** 부록 정의표는 여러 용어를 한 Chunk에 담아, 해당 용어를 자주 언급하는 본문에 순위가 밀릴 수 있습니다.
+- **출처는 보장되지만 해석은 보장되지 않습니다.** 카드에 뜨는 출처와 원문은 DB에서 가져온 값이라 100% 정확합니다. 그러나 본문 문장이 그 원문을 올바르게 해석했는지 확인하는 장치는 없습니다.
+- **어느 근거를 인용할지는 모델이 정합니다.** `[E1]`을 붙였다고 그 문단이 실제로 그 문장을 뒷받침한다는 보장은 없습니다. 사용자가 카드의 원문과 대조할 수 있게 만든 것이 대응책입니다.
+- **답변이 근거의 범위를 넘는지 판단할 장치가 없습니다.** 이전의 의미 판정 LLM이 그 역할을 일부 했지만 기각률이 너무 높아 제거했습니다.
+- **거절 화면이 모델의 설명을 보여주지 않습니다.** 모델이 "제1012호 소관"처럼 구체적으로 안내해도 프론트엔드는 고정 문구로 대체합니다.
+- **그래프 관계 대부분이 질의에 쓰이지 않습니다.** `REFERS_TO` 12,796개, `MENTIONS` 17,712개는 적재만 되어 있습니다. `REFERS_TO`를 1-hop 확장에 써보는 안을 검토했으나, 청크의 65%에서 확장 결과가 0개이고 최대 63개까지 튀어 도입하지 않았습니다.
+- **결과에 변동성이 있습니다.** 답변 생성 LLM에 `temperature`를 설정하지 않아 같은 질문이 다르게 답할 수 있습니다. 재정렬 제거로 변동 폭은 크게 줄었지만 0은 아닙니다.
 
-## 저장소 구성
+## 저장소 정책
 
-| 경로 | 내용 |
+- `.env`, API 키, DB 비밀번호는 커밋하지 않습니다.
+- 기준서 원본(PDF/HWP/HWPX)과 `data/` 파생 데이터는 커밋하지 않습니다.
+- 공개 저장소에는 코드, 스키마, 설정 예시, 문서만 포함합니다.
+
+## 문서
+
+| 파일 | 내용 |
 |---|---|
-| `src/accounting_rag/retrieval/` | Hybrid 검색, 형제 보강, 임베딩 |
-| `src/accounting_rag/generation/` | 답변 생성과 결정적 검증 |
-| `src/accounting_rag/ingestion/` | HWPX 파싱, 청킹, PDF 페이지 매핑 |
-| `src/accounting_rag/graph/` | Neo4j 적재, 의미 KG |
-| `src/accounting_rag/qa_pipeline.py` | 검색 → 생성 → 상태 판정 |
-| `config/` | 검색·답변·그래프·청킹 설정 |
-| `db/` | 제약조건·인덱스 DDL |
-| `PROJECT_STRUCTURE.md` | 아키텍처, 설계 결정과 근거 |
-| `NEO4J_SCHEMA.md` | 노드·관계·ID·인덱스 |
-
-기준서 원문과 파생 데이터(파싱 결과·Chunk·임베딩)는 저작권 때문에 포함하지 않습니다.
+| `PROJECT_STRUCTURE.md` | 아키텍처, 설계 결정과 그 근거, 디렉터리 구조, 구현 단계 |
+| `NEO4J_SCHEMA.md` | 노드·관계·ID 규칙·인덱스·적재 순서 |
+| `DEPLOYMENT.md` | Aura·Render·Pages 배포 절차와 함정 |
+| `REVIEW_DECISIONS.md` | 코드 리뷰에서 나온 결정과 그 이유 |
+| `PROJECT_WORKFLOW.html` | 색인·질의 흐름 시각화 |

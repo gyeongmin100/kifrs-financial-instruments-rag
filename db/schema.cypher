@@ -84,6 +84,15 @@ OPTIONS {indexConfig: {`fulltext.analyzer`: 'cjk', `fulltext.eventually_consiste
 CREATE INDEX semantic_review_status IF NOT EXISTS
 FOR (n:Rule) ON (n.review_status);
 
+CREATE INDEX condition_review_status IF NOT EXISTS
+FOR (n:Condition) ON (n.review_status);
+
+CREATE INDEX exception_review_status IF NOT EXISTS
+FOR (n:Exception) ON (n.review_status);
+
+CREATE INDEX example_review_status IF NOT EXISTS
+FOR (n:Example) ON (n.review_status);
+
 CREATE INDEX refers_to_review_status IF NOT EXISTS
 FOR ()-[r:REFERS_TO]-() ON (r.review_status);
 

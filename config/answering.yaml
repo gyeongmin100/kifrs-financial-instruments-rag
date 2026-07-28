@@ -8,4 +8,6 @@ answer:
   max_context_chars: 14000
   # 질문 길이 상한. 초과하면 ValueError를 던진다(이미지 첨부 시 추출 텍스트가 붙는다).
   max_question_chars: 2000
-  max_output_tokens: 3000
+  # 추론 모델은 생각에 쓴 토큰도 여기에 포함한다. 3000에서는 긴 답변의 JSON이
+  # 문장 중간에 끊겨 파싱이 실패했다. 한도일 뿐이라 쓴 만큼만 과금된다.
+  max_output_tokens: 8000

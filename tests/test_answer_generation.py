@@ -24,19 +24,17 @@ class FakeResponses:
         return SimpleNamespace(output_text=json.dumps(self.payload, ensure_ascii=False))
 
 
-def candidate(chunk_id="C1", text="기대신용손실을 측정한다.", citation="제1109호 5.5.17"):
-    return {"chunk_id": chunk_id, "text": text, "citation_label": citation}
+def candidate(chunk_id="C1", text="기대신용손실을 측정한다.", citation="제1109호 5.5.17",
+              **metadata):
+    return {"chunk_id": chunk_id, "text": text, "citation_label": citation, **metadata}
 
 
 def valid_payload():
+    # 모델은 인용한 evidence_id만 돌려준다. 출처와 원문은 생성기가 목록에서 채운다.
     return {
         "conclusion": "보고기간 말에 기대신용손실을 측정한다. [E1]",
         "reasoning": ["해당 문단은 측정 원칙을 직접 규정한다. [E1]"],
-        "evidence": [{
-            "evidence_id": "E1",
-            "citation": "제1109호 5.5.17",
-            "statement": "기대신용손실 측정 원칙",
-        }],
+        "evidence": ["E1"],
     }
 
 
@@ -72,32 +70,46 @@ class AnswerGenerationTests(unittest.TestCase):
         self.assertEqual([len(item["statement"]) for item in offered], [5, 3])
         self.assertEqual([item["evidence_id"] for item in offered], ["E1", "E2"])
 
-    def test_unknown_duplicate_id_or_wrong_citation_falls_back(self):
-        invalid = []
-        unknown = valid_payload()
-        unknown["evidence"][0]["evidence_id"] = "E9"
-        invalid.append(unknown)
-        duplicate = valid_payload()
-        duplicate["evidence"].append(dict(duplicate["evidence"][0]))
-        invalid.append(duplicate)
-        wrong_citation = valid_payload()
-        wrong_citation["evidence"][0]["citation"] = "invented"
-        invalid.append(wrong_citation)
-        for payload in invalid:
-            with self.subTest(payload=payload):
-                result = OpenAIAnswerGenerator(
-                    SimpleNamespace(responses=FakeResponses(payload)), model="model"
-                ).generate("질문", [candidate()])
-                self.assertEqual(result["evidence"], [])
-                self.assertTrue(result["conclusion"].startswith("근거 부족:"))
+    def test_citation_and_statement_come_from_the_catalog(self):
+        # 모델은 evidence_id만 말하므로 출처와 원문을 지어낼 통로 자체가 없다.
+        result = OpenAIAnswerGenerator(
+            SimpleNamespace(responses=FakeResponses(valid_payload())), model="model"
+        ).generate("질문", [candidate(pdf_page_start=12, candidate_source="hybrid")])
+        self.assertEqual(result["evidence"], [{
+            "evidence_id": "E1",
+            "citation": "제1109호 5.5.17",
+            "statement": "기대신용손실을 측정한다.",
+            "source_id": "C1",
+            "pdf_page_start": 12,
+            "candidate_source": "hybrid",
+        }])
 
-    def test_uncited_narrative_falls_back(self):
+    def test_unknown_and_duplicate_ids_are_dropped_without_discarding_answer(self):
+        payload = valid_payload()
+        payload["evidence"] = ["E9", "E1", "E1"]
+        result = OpenAIAnswerGenerator(
+            SimpleNamespace(responses=FakeResponses(payload)), model="model"
+        ).generate("질문", [candidate()])
+        self.assertEqual([item["evidence_id"] for item in result["evidence"]], ["E1"])
+        self.assertEqual(result["conclusion"], payload["conclusion"])
+
+    def test_narrative_without_a_marker_is_kept(self):
         uncited = valid_payload()
         uncited["conclusion"] = "기대신용손실을 측정한다."
         result = OpenAIAnswerGenerator(
             SimpleNamespace(responses=FakeResponses(uncited)), model="model"
         ).generate("질문", [candidate()])
-        self.assertEqual(result["evidence"], [])
+        self.assertEqual(result["conclusion"], "기대신용손실을 측정한다.")
+        self.assertEqual([item["evidence_id"] for item in result["evidence"]], ["E1"])
+
+    def test_marker_only_in_the_text_still_produces_an_evidence_card(self):
+        # 목록에서 빠졌더라도 본문이 인용했으면 카드를 만든다.
+        payload = valid_payload()
+        payload["evidence"] = []
+        result = OpenAIAnswerGenerator(
+            SimpleNamespace(responses=FakeResponses(payload)), model="model"
+        ).generate("질문", [candidate()])
+        self.assertEqual([item["evidence_id"] for item in result["evidence"]], ["E1"])
 
     def test_one_reasoning_step_may_contain_explanation_before_its_citation(self):
         payload = valid_payload()
@@ -105,18 +117,16 @@ class AnswerGenerationTests(unittest.TestCase):
         result = OpenAIAnswerGenerator(
             SimpleNamespace(responses=FakeResponses(payload)), model="model"
         ).generate("질문", [candidate()])
-        self.assertEqual(result, payload)
+        self.assertEqual(result["reasoning"], payload["reasoning"])
+        self.assertEqual([item["evidence_id"] for item in result["evidence"]], ["E1"])
 
-    def test_unused_evidence_falls_back(self):
-
-        unused = valid_payload()
-        unused["evidence"].append({
-            "evidence_id": "E2", "citation": "문단 2", "statement": "보조 근거"
-        })
+    def test_declared_but_uncited_evidence_is_kept(self):
+        payload = valid_payload()
+        payload["evidence"] = ["E1", "E2"]
         result = OpenAIAnswerGenerator(
-            SimpleNamespace(responses=FakeResponses(unused)), model="model"
+            SimpleNamespace(responses=FakeResponses(payload)), model="model"
         ).generate("질문", [candidate(), candidate("C2", citation="문단 2")])
-        self.assertEqual(result["evidence"], [])
+        self.assertEqual([item["evidence_id"] for item in result["evidence"]], ["E1", "E2"])
 
     def test_insufficient_answer_without_citation_is_allowed(self):
         payload = {

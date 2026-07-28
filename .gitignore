@@ -22,6 +22,7 @@ data/processed/**
 data/chunks/**
 data/embeddings/**
 data/semantic/**
+data/semantic_candidates/**
 data/validation/**
 !data/README.md
 

@@ -21,7 +21,9 @@ class AnswerConfig:
     max_candidate_chars: int = 1800
     max_context_chars: int = 14000
     max_question_chars: int = 2000
-    max_output_tokens: int = 3000
+    # 추론 모델은 생각하는 데 쓴 토큰도 이 한도에 포함한다. 값이 작으면 JSON이 문장
+    # 중간에서 끊겨 파싱 자체가 실패한다. 한도일 뿐이라 실제 사용량만큼만 과금된다.
+    max_output_tokens: int = 8000
 
     def __post_init__(self) -> None:
         for field in (
@@ -49,19 +51,9 @@ _ANSWER_SCHEMA: dict[str, Any] = {
     "properties": {
         "conclusion": {"type": "string"},
         "reasoning": {"type": "array", "items": {"type": "string"}},
-        "evidence": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "evidence_id": {"type": "string"},
-                    "citation": {"type": "string"},
-                    "statement": {"type": "string"},
-                },
-                "required": ["evidence_id", "citation", "statement"],
-                "additionalProperties": False,
-            },
-        },
+        # 인용한 evidence_id만 받는다. 출처와 원문은 우리가 만든 목록에서 채우므로
+        # 모델에게 되묻지 않는다. 물어보지 않은 값은 틀릴 수도, 지어낼 수도 없다.
+        "evidence": {"type": "array", "items": {"type": "string"}},
     },
     "required": ["conclusion", "reasoning", "evidence"],
     "additionalProperties": False,
@@ -74,11 +66,13 @@ _SYSTEM_PROMPT = """당신은 K-IFRS 금융상품 질의에 답하는 근거 중
 규칙:
 1. 결론과 판단과정의 사실 또는 회계 판단 문장 끝에는 반드시 [E1] 같은 evidence_id를 붙인다.
 2. reasoning의 각 원소는 한 가지 판단 단계만 담는다.
-3. evidence에는 실제로 답변에서 인용한 항목만 넣고, 제공된 evidence_id와 citation을 그대로 쓴다.
+3. evidence에는 실제로 인용한 evidence_id만 문자열로 나열한다. 예: ["E1", "E3"]
+   출처와 원문은 시스템이 채우므로 옮겨 적지 않는다.
 4. 근거 원문의 의미를 확대하거나 서로 다른 조건을 임의로 합치지 않는다.
 5. 결론에 필요한 조건, 예외 또는 사실관계가 부족하면 단정하지 않는다. 그 문장은
    '근거 부족:'으로 시작하여 무엇이 부족한지 구체적으로 밝힌다. 이 메타 문장에는 인용이 없어도 된다.
-6. 질문에 답할 근거가 전혀 없으면 결론에서 답변할 수 없다고 밝히고 evidence는 빈 배열로 둔다.
+6. 질문에 답할 근거가 전혀 없으면 결론을 반드시 '근거 부족:'으로 시작하고 evidence는 빈 배열로 둔다.
+   '답변할 수 없습니다' 같은 다른 표현을 쓰지 않는다.
 7. 질문 형식에 맞춰 스스로 답한다. 보기가 있으면 각 보기를 근거와 대조한 뒤 결론에 선택지를 명시하고,
    계산이 필요하면 판단과정에 사용한 값·식·단위와 계산 결과를 명시한다.
 8. 한국어로 간결하게 작성한다."""
@@ -144,68 +138,56 @@ def prepare_evidence_catalog(
     return prepared
 
 
-def _validate_narrative(text: str, allowed_ids: set[str]) -> None:
-    if not text.strip():
-        raise ValueError("answer narrative must not be empty")
-    markers = _MARKER_RE.findall(text)
-    unknown = set(markers) - allowed_ids
-    if unknown:
-        raise ValueError(f"answer contains unknown evidence ids: {sorted(unknown)}")
-    if not markers and not text.strip().startswith(_INSUFFICIENT_PREFIXES):
-        raise ValueError("every grounded conclusion and reasoning step must cite an evidence_id")
+_EVIDENCE_KEYS = (
+    "source_id", "pdf_page_start", "pdf_page_end", "candidate_source",
+)
 
 
-def _validate_answer(payload: Any, offered: Sequence[Mapping[str, str]]) -> dict[str, Any]:
-    if not isinstance(payload, dict) or set(payload) != {"conclusion", "reasoning", "evidence"}:
-        raise ValueError("answer must contain exactly conclusion, reasoning, and evidence")
-    conclusion = payload["conclusion"]
-    reasoning = payload["reasoning"]
-    evidence = payload["evidence"]
-    if not isinstance(conclusion, str) or not isinstance(reasoning, list) or not isinstance(evidence, list):
-        raise ValueError("answer fields have invalid types")
-    if any(not isinstance(step, str) or not step.strip() for step in reasoning):
-        raise ValueError("reasoning must contain non-empty strings")
+def _assemble_answer(
+    payload: Any, offered: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """모델 응답을 화면에 낼 형태로 조립한다.
 
-    offered_by_id = {item["evidence_id"]: item for item in offered}
-    validated_evidence: list[dict[str, str]] = []
-    ids: list[str] = []
-    for item in evidence:
-        if not isinstance(item, dict) or set(item) != {"evidence_id", "citation", "statement"}:
-            raise ValueError("every evidence item must have exactly the required fields")
-        if not all(isinstance(item[key], str) and item[key].strip() for key in item):
-            raise ValueError("evidence fields must be non-empty strings")
-        evidence_id = item["evidence_id"].strip()
-        if evidence_id not in offered_by_id:
-            raise ValueError(f"unknown evidence_id: {evidence_id}")
-        if item["citation"].strip() != offered_by_id[evidence_id]["citation"]:
-            raise ValueError(f"citation does not match offered evidence: {evidence_id}")
-        ids.append(evidence_id)
-        validated_evidence.append({
+    거절하거나 폐기하지 않는다. 모델에게서 받는 것은 결론·판단과정·evidence_id뿐이고,
+    출처와 원문은 우리가 만든 목록에서 되찾아 채우므로 변조될 수 없다.
+    """
+    if not isinstance(payload, Mapping):
+        raise ValueError("answer payload must be an object")
+    conclusion = str(payload.get("conclusion") or "").strip()
+    if not conclusion:
+        raise ValueError("answer conclusion must not be empty")
+    reasoning = [
+        str(step).strip()
+        for step in (payload.get("reasoning") or [])
+        if str(step).strip()
+    ]
+
+    # 선언한 목록과 본문에 실제로 찍힌 [E1] 마커를 합친다. 둘 중 하나만 보면
+    # 본문은 인용했는데 목록에서 빠진 근거가 카드에서 사라진다.
+    cited = [str(item).strip() for item in (payload.get("evidence") or [])]
+    for text in (conclusion, *reasoning):
+        cited.extend(_MARKER_RE.findall(text))
+
+    offered_by_id = {str(item["evidence_id"]): item for item in offered}
+    evidence: list[dict[str, Any]] = []
+    for evidence_id in dict.fromkeys(cited):
+        source = offered_by_id.get(evidence_id)
+        if source is None:
+            continue
+        item: dict[str, Any] = {
             "evidence_id": evidence_id,
-            "citation": item["citation"].strip(),
-            "statement": item["statement"].strip(),
-        })
-    if len(ids) != len(set(ids)):
-        raise ValueError("answer contains duplicate evidence_id values")
-
-    allowed_ids = set(ids)
-    _validate_narrative(conclusion, allowed_ids)
-    for step in reasoning:
-        _validate_narrative(step, allowed_ids)
-    referenced = set(_MARKER_RE.findall(conclusion))
-    for step in reasoning:
-        referenced.update(_MARKER_RE.findall(step))
-    if referenced != allowed_ids:
-        raise ValueError("every returned evidence item must be cited in the answer")
-    return {
-        "conclusion": conclusion.strip(),
-        "reasoning": [step.strip() for step in reasoning],
-        "evidence": validated_evidence,
-    }
+            "citation": str(source["citation"]),
+            "statement": str(source["statement"]),
+        }
+        for key in _EVIDENCE_KEYS:
+            if source.get(key) is not None:
+                item[key] = source[key]
+        evidence.append(item)
+    return {"conclusion": conclusion, "reasoning": reasoning, "evidence": evidence}
 
 
 class OpenAIAnswerGenerator:
-    """Generate a citation-checked answer from reranked retrieval candidates."""
+    """Generate an answer whose citations are filled in from the offered catalog."""
 
     def __init__(self, client: Any, *, model: str,
                  config: AnswerConfig | None = None) -> None:
@@ -247,7 +229,7 @@ class OpenAIAnswerGenerator:
             output_text = getattr(response, "output_text", None)
             if not isinstance(output_text, str) or not output_text.strip():
                 raise ValueError("answer response has no structured output text")
-            return _validate_answer(json.loads(output_text), offered)
+            return _assemble_answer(json.loads(output_text), offered)
         except Exception as error:
             logger.warning("answer generation fallback: %s: %s", type(error).__name__, error)
             return _fallback()

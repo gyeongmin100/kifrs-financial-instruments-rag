@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="K-IFRS 금융상품 기준서에 근거해 답변하는 AI Accountant">
+  <title>AI Accountant</title>
+  <link rel="icon" href="/static/favicon.png" type="image/png">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<!-- 사이드바는 닫힌 상태로 첫 페인트를 시작한다. 기본값을 열림으로 두면 스크립트가 실행되며
+     닫는 과정이 화면에 애니메이션으로 노출된다. sidebar-boot는 그 첫 적용에서만 전환을 끈다. -->
+<body class="sidebar-collapsed sidebar-boot">
+  <a class="skip-link" href="#question">질문 입력으로 바로가기</a>
+  <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="대화 목록 열기" aria-expanded="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+  </button>
+  <aside id="sidebar" class="sidebar" aria-label="저장된 대화">
+    <div class="sidebar-header">
+      <button id="new-chat-button" class="new-chat-button" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        <span>새 대화</span>
+      </button>
+      <button id="sidebar-close" class="sidebar-close" type="button" aria-label="대화 목록 닫기">×</button>
+    </div>
+    <p class="history-label">대화</p>
+    <nav id="history-list" class="history-list" aria-label="대화 기록"></nav>
+    <p id="history-empty" class="history-empty">저장된 대화가 없습니다.</p>
+  </aside>
+  <div id="sidebar-overlay" class="sidebar-overlay" hidden></div>
+  <main>
+    <section id="landing" class="landing" aria-labelledby="landing-title">
+      <h1 id="landing-title">금융상품 AI Accountant에 오신 걸 환영합니다</h1>
+    </section>
+
+    <section id="conversation" class="conversation" aria-label="현재 대화" hidden>
+      <div id="messages" class="messages" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <div class="composer-dock">
+    <form id="ask-form" class="composer" novalidate>
+      <div id="attachment-preview" class="attachment-preview" aria-live="polite" hidden></div>
+      <div class="input-row">
+        <label class="sr-only" for="question">질문</label>
+        <input id="image-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+        <button id="attach-button" class="icon-button" type="button" aria-label="이미지 첨부" title="이미지 첨부">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+        <textarea id="question" name="question" rows="1" maxlength="2000" aria-label="질문"
+          placeholder="무엇이든 물어보세요"></textarea>
+        <button id="submit-button" class="send-button" type="submit" aria-label="질문 보내기">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 7-7 7 7M12 19V5"/></svg>
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <div id="drop-zone" class="drop-zone" hidden><div>이미지를 여기에 놓으세요</div></div>
+  <div id="message" class="toast" role="alert" hidden></div>
+  <script src="/static/config.js"></script>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

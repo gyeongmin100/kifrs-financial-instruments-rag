@@ -85,14 +85,20 @@ class QAPipelineTests(unittest.TestCase):
         self.assertEqual(kwargs["zone"], "standard_body")
         self.assertEqual(kwargs["top_k"], 5)
 
-    def test_answer_evidence_is_enriched_with_retrieval_metadata(self):
-        retriever = StubRetriever([
-            candidate(pdf_page_start=12, candidate_source="hybrid"),
-        ])
-        result = AccountingQAPipeline(retriever, StubGenerator(answer())).ask("질문")
-        evidence = result["answer"]["evidence"][0]
-        self.assertEqual(evidence["evidence_id"], "E1")
-        self.assertEqual(evidence["pdf_page_start"], 12)
+    def test_generator_evidence_is_passed_through_untouched(self):
+        # 출처·원문 조립은 생성기가 끝내므로 파이프라인은 손대지 않는다.
+        generated = answer()
+        result = AccountingQAPipeline(
+            StubRetriever([candidate()]), StubGenerator(generated)
+        ).ask("질문")
+        self.assertEqual(result["answer"]["evidence"], generated["evidence"])
+
+    def test_answer_without_any_evidence_counts_as_insufficient(self):
+        # 모델이 접두사 없이 다른 표현으로 거절해도 근거가 비면 답변으로 보지 않는다.
+        generator = StubGenerator(answer(conclusion="답변할 수 없습니다.", evidence_ids=()))
+        result = AccountingQAPipeline(StubRetriever([candidate()]), generator).ask("질문")
+        self.assertEqual(result["status"], "insufficient")
+        self.assertEqual(result["reason"], "self_declined")
 
     def test_empty_question_is_rejected(self):
         with self.assertRaises(ValueError):

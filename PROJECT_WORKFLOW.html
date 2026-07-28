@@ -311,11 +311,11 @@
         <tr><td>S6-02</td><td><span class="badge done">✓ 단일화</span></td><td>객관식·주관식·계산형 전용 라우팅 없이 모든 요청을 일반 답변 생성기로 처리</td><td>Codex</td><td>사용자 질문 원문에 맞춰 결론·판단 과정·근거를 생성하고 동일한 인용 검증 적용</td></tr>
         <tr><td>S6-04</td><td><span class="badge done">✓ 제거</span></td><td>당시: 답변 전 결정적 조건과 OpenAI 의미 판단을 결합한 충분성 검사. 완전성 기준이 정상 질문을 기각해 제거</td><td>Codex</td><td>claim coverage·supported evidence·missing aspects·confidence 저장</td></tr>
         <tr><td>S6-05</td><td><span class="badge done">✓ 제거</span></td><td>당시: 근거 부족 시 missing_aspects만 확장해 최대 1회 재검색. 충분성 검사와 함께 제거</td><td>Codex</td><td>무한 반복 없이 계속 부족하면 insufficient 반환</td></tr>
-        <tr><td>S6-06</td><td><span class="badge done">✓ 이동</span></td><td>evidence ID, citation, 문장별 인용 무결성 검증. 별도 모듈(citation_verifier.py)을 없애고 생성 직후 _validate_answer()로 이동</td><td>Codex</td><td>존재하지 않는 근거 ID·불일치 citation·인용 없는 단정 차단</td></tr>
+        <tr><td>S6-06</td><td><span class="badge done">✓ 제거</span></td><td>evidence ID·citation 무결성 검증. 별도 모듈(citation_verifier.py) 제거 후 생성기 내부로 옮겼다가, 검증 자체를 없애고 <em>모델에게 출처를 묻지 않는</em> 방식으로 대체</td><td>Codex</td><td>검사 대신 구조로 차단 — 묻지 않은 값은 지어낼 수 없다</td></tr>
         <tr><td>S6-07</td><td><span class="badge done">✓ 완료</span></td><td>일반 답변을 결론 / 판단 과정 / 근거로 구성하고 검증된 인용만 포함</td><td>Codex</td><td>모든 주요 사실 주장에 실제 기준서 근거 연결</td></tr>
         <tr><td>S6-08</td><td><span class="badge done">✓ 완료</span></td><td>OpenAI API·구조화 출력 실패의 보수적 fallback</td><td>Codex</td><td>실패가 조용히 잘못된 답변으로 변하지 않음</td></tr>
       </tbody></table></div>
-      <p class="note"><strong>현재 검증 방식:</strong> <code>generation/answer.py</code>의 <code>_validate_answer()</code>가 모델 출력을 받자마자 ① evidence_id 존재 ② citation 정확 일치 ③ 문장별 인용 ④ 인용 집합 == 근거 집합을 검사하고, 하나라도 어긋나면 생성 답변을 버리고 <code>근거 부족: 검증된 답변을 생성하지 못했습니다.</code>를 반환합니다. 별도 <code>citation_verifier.py</code>는 제거했고 검증은 생성 직후로 옮겼습니다. 결론이 <code>근거 부족:</code> 또는 <code>답변 불가:</code>로 시작하면 인용 없이 통과해 모델의 자체 거절 경로가 열립니다.</p>
+      <p class="note"><strong>현재 방식:</strong> 검증하지 않습니다. <code>generation/answer.py</code>의 <code>_assemble_answer()</code>가 모델이 말한 <code>evidence_id</code>와 본문의 <code>[E1]</code> 마커를 합쳐, 검색 단계에서 만든 근거 목록에서 출처와 원문을 <em>조회해 채웁니다</em>. 모델이 출처를 지어낼 통로가 없으므로 대조할 필요도 없습니다. 모르는 번호는 그 항목만 빠지고 답변은 유지됩니다. 거절 판정은 접두사(<code>근거 부족:</code>·<code>답변 불가:</code>)와 <strong>인용한 근거가 하나도 없는지</strong>를 함께 봅니다. 접두사만 믿으면 모델이 "답변할 수 없습니다" 같은 다른 표현으로 거절했을 때 정상 답변으로 잘못 분류됩니다.</p>
     </section>
 
     <section class="phase-detail hidden" data-detail="7">
@@ -795,25 +795,26 @@ Concept는 탐색을 잇는 중간 노드이며 최종 인용 근거로 제시�
     </tbody></table></div>
     <p class="note">남은 <strong>3.4%</strong>가 형제 보강의 존재 이유입니다. 형제까지 합쳐도 평균 1,283자, p95 3,326자, 최대 6,250자로 컨텍스트 예산 안에 들어옵니다.</p>
 
-    <h3>답변 검증 (게이트를 없앤 뒤 남은 방어선)</h3>
-    <pre class="ascii">_validate_answer()  generation/answer.py
-├─ 최상위 키가 정확히 conclusion / reasoning / evidence 셋인가
-├─ 모든 evidence_id가 제공한 카탈로그에 존재하는가
-├─ citation 문자열이 제공값과 정확히 일치하는가
-├─ evidence_id 중복이 없는가
-├─ 결론·판단과정의 모든 문장에 [E1] 인용이 있는가
-└─ 인용한 ID 집합 == 반환한 근거 ID 집합인가
+    <h3>출처 보장 (검사하지 않고, 애초에 묻지 않는다)</h3>
+    <pre class="ascii">모델에게 받는 것은 세 가지뿐
 
-하나라도 어긋나면 -> _fallback()
-   conclusion = "근거 부족: 검증된 답변을 생성하지 못했습니다."
+  {"conclusion": "... [E2]",
+   "reasoning":  ["... [E2]"],
+   "evidence":   ["E2"]}          <- 번호 목록. citation/statement 없음
 
-예외: 결론이 '근거 부족:' 또는 '답변 불가:'로 시작하면
-      인용 없이 통과 (모델의 자체 거절 경로)</pre>
+_assemble_answer()  generation/answer.py
+├─ 선언한 목록 + 본문의 [E1] 마커를 합집합으로 모음
+├─ 우리가 만든 근거 목록에서 번호로 조회
+├─ citation / statement 를 그 값으로 채움   <- 모델 출력 미사용
+└─ 모르는 번호는 그 항목만 제외 (답변은 유지)
+
+폐기하지 않는다. _fallback() 은 API 오류와 JSON 파싱 실패에만 쓰인다.</pre>
+    <p class="note"><strong>왜 검사를 없앴나.</strong> 이전에는 검사 6종 중 하나만 어긋나도 답변 전체를 폐기했습니다. 질문 14개로 측정한 결과 거절 4건 중 <strong>3건이 진짜 거절이 아니라 검사에 걸린 것</strong>이었습니다. 예를 들어 법인세비용 질문에서 모델은 근거 3개를 인용하며 "제1012호 소관"이라 정확히 안내했으나, 문장 하나에 마커가 없다는 이유로 통째로 버려지고 <code>근거 부족: 검증된 답변을 생성하지 못했습니다.</code>로 대체됐습니다. 출처(<code>citation</code>)와 원문(<code>statement</code>)은 검색 단계에서 우리가 이미 갖고 있는 값이므로, 모델에게 되묻지 않으면 대조할 일도 폐기할 일도 없습니다. 바꾼 뒤 같은 14개 질문에서 <strong>답변 10 → 11건, 검사로 폐기된 답변 3 → 0건</strong>이 되었습니다. 함께 <code>max_output_tokens</code>를 3000 → 8000으로 올렸습니다. 추론 모델은 생각에 쓴 토큰도 이 한도에 포함해, 긴 답변의 JSON이 문장 중간에서 끊겨 파싱이 실패하고 있었습니다.</p>
 
     <h3>상태 계약</h3>
     <div class="table-wrap"><table><thead><tr><th>status</th><th>reason</th><th>조건</th></tr></thead><tbody>
-      <tr><td><code>answered</code></td><td><code>sufficient</code></td><td>검증 통과 + 거절 접두사 없음</td></tr>
-      <tr><td><code>insufficient</code></td><td><code>self_declined</code></td><td>모델 자체 거절 또는 검증 실패 fallback</td></tr>
+      <tr><td><code>answered</code></td><td><code>sufficient</code></td><td>근거를 인용했고 거절 접두사도 없음</td></tr>
+      <tr><td><code>insufficient</code></td><td><code>self_declined</code></td><td>근거가 비었거나 거절 접두사로 시작</td></tr>
       <tr><td><code>insufficient</code></td><td><code>no_evidence_found</code></td><td>검색 결과 0건</td></tr>
     </tbody></table></div>
     <p class="note"><strong>프론트엔드는 이 조합으로만 화면을 고릅니다.</strong> conclusion 문자열을 파싱해 상태를 추측하지 않습니다. reason 값을 바꾸면 <code>api/schemas.py</code>와 <code>static/app.js</code>의 <code>resultKind()</code>를 함께 바꾸고, 프론트엔드를 먼저 배포해야 합니다.</p>
