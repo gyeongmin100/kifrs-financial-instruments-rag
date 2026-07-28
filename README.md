@@ -23,7 +23,7 @@ K-IFRS 제1032호·제1039호·제1107호·제1109호를 구조화해 Neo4j에 �
 | **⑤를 선택** | **③을 선택 — 정답** |
 | <img src="docs/images/gpt-answer.png" alt="범용 GPT가 5번을 선택한 답변" width="520"> | <img src="docs/images/ai-accountant-answer.png" alt="AI Accountant가 정답 3번을 선택한 답변" width="520"> |
 
-범용 GPT는 ⑤를 답으로 제시했지만, AI Accountant는 검색한 K-IFRS 근거와 계산 과정을 제시하며 정답인 ③을 선택했습니다. 문제지에는 ③과 ⑤의 금액 조합이 동일하게 중복 표기되어 있으며, 정답 번호는 ③입니다.
+범용 GPT는 ⑤를 답으로 제시했지만, AI Accountant는 검색한 K-IFRS 근거와 계산 과정을 제시하며 정답인 ③을 선택했습니다.
 
 > 이 결과는 위 문항에 대한 단일 비교 사례입니다. 모든 회계 문제에서 동일한 정확도를 보장하지는 않습니다.
 
