@@ -1,8 +1,9 @@
 # K-IFRS Financial Instruments QA
 
+https://accounting-rag.pages.dev
+
 K-IFRS 제1032호·제1039호·제1107호·제1109호를 구조화해 Neo4j에 적재하고, 기준서 원문에 근거해서만 답하는 금융상품 텍스트·이미지 질의응답 서비스입니다.
 
-라이브: https://accounting-rag.pages.dev
 
 ## 서비스 화면
 
