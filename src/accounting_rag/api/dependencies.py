@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
 from typing import Any, Sequence
+
+from pydantic import BaseModel
 
 from accounting_rag.api.schemas import ImageAttachment
 
@@ -13,6 +16,21 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 class PipelineUnavailable(RuntimeError):
     """Raised when the configured OpenAI/Neo4j pipeline cannot be created."""
+
+
+@dataclass(frozen=True)
+class ImageSearchQuery:
+    semantic_query: str
+    keywords: tuple[str, ...]
+
+    @property
+    def keyword_query(self) -> str:
+        return " ".join(self.keywords)
+
+
+class ImageSearchOutput(BaseModel):
+    semantic_query: str
+    keywords: list[str]
 
 
 _pipeline: Any | None = None
@@ -99,32 +117,54 @@ def close_pipeline() -> None:
 
 def question_with_images(
     question: str, images: Sequence[ImageAttachment],
-) -> str:
-    """Turn attached images into retrieval text without persisting them."""
+) -> ImageSearchQuery:
+    """Create separate semantic and keyword searches from attached images."""
     if not images:
-        return question
+        clean_question = question.strip()
+        return ImageSearchQuery(clean_question, (clean_question,))
 
     from openai import OpenAI
 
     content: list[dict[str, str]] = [{
         "type": "input_text",
-        "text": (
-            "첨부 이미지를 회계 질의에 사용할 수 있도록 분석하세요. 이미지 속 문구와 숫자를 "
-            "가능한 정확히 옮기고, 표라면 행과 열의 관계를 보존하세요. 설명이나 추측을 덧붙이지 "
-            f"말고 검색 가능한 한국어 텍스트만 반환하세요. 사용자의 질문: {question or '(없음)'}"
-        ),
+        "text": f"""당신은 이미지를 분석하여 검색 정보를 만드는 K-IFRS 금융상품 회계 전문가다.
+
+사용자의 질문과 첨부 이미지를 분석하고, 관련 자료를 벡터검색과 키워드 검색으로 찾기 위한 검색 정보를 작성한다.
+
+규칙:
+1. 거래의 실질, 금융상품 유형 및 핵심 회계 쟁점을 파악한다.
+2. 문제의 정답을 계산하거나 제시하지 않는다.
+3. semantic_query에는 핵심 회계 쟁점을 관련 자료에서 사용될 만한 회계 용어로 설명하는 완전한 자연어 문장을 작성한다.
+4. 문제 문장을 그대로 옮기지 않는다.
+5. keywords에는 키워드 검색에 사용할 핵심 회계 용어만 작성한다.
+6. 금액, 날짜, 회사명 등 검색에 불필요한 사실은 제외하되, 회계 판단에 영향을 미치는 계약조건과 거래 특성은 포함한다.
+7. 입력에서 확인되지 않은 사실이나 회계 쟁점을 추가하지 않는다.
+8. 이미지가 불명확한 경우 확인할 수 있는 범위에서만 작성한다.
+9. 문제의 정답이나 계산 결과를 검색 정보에 포함하지 않는다.
+10. JSON 외의 내용은 출력하지 않는다.
+
+사용자의 질문: {question or '(없음)'}""",
     }]
     content.extend({
         "type": "input_image",
         "image_url": f"data:{image.mime_type};base64,{image.data}",
         "detail": "high",
     } for image in images)
-    response = OpenAI(api_key=os.environ.get("OPENAI_API_KEY")).responses.create(
+    response = OpenAI(api_key=os.environ.get("OPENAI_API_KEY")).responses.parse(
         model=os.environ["OPENAI_CHAT_MODEL"],
         input=[{"role": "user", "content": content}],
-        max_output_tokens=2_000,
+        text_format=ImageSearchOutput,
+        max_output_tokens=8_000,
         store=False,
     )
-    extracted = response.output_text.strip()
-    combined = f"{question}\n\n첨부 이미지 내용:\n{extracted}" if question else extracted
-    return combined[:12_000]
+    if response.status != "completed" or response.output_parsed is None:
+        raise PipelineUnavailable("image search analysis did not complete")
+
+    semantic_query = response.output_parsed.semantic_query.strip()
+    keywords = tuple(dict.fromkeys(
+        keyword.strip() for keyword in response.output_parsed.keywords
+        if keyword.strip()
+    ))
+    if not semantic_query or not keywords:
+        raise PipelineUnavailable("image search analysis returned an empty query")
+    return ImageSearchQuery(semantic_query[:6_000], keywords)

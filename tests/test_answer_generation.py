@@ -8,7 +8,9 @@ SRC = Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from accounting_rag.generation.answer import AnswerConfig, OpenAIAnswerGenerator
+from accounting_rag.generation.answer import (
+    AnswerConfig, AnswerGenerationError, OpenAIAnswerGenerator,
+)
 
 
 class FakeResponses:
@@ -52,8 +54,48 @@ class AnswerGenerationTests(unittest.TestCase):
         self.assertEqual(call["text"]["format"]["type"], "json_schema")
         self.assertTrue(call["text"]["format"]["strict"])
         self.assertFalse(call["store"])
+        system_prompt = call["input"][0]["content"]
+        self.assertIn("evidence를 회계기준 판단의 최우선 근거로 사용한다", system_prompt)
+        self.assertIn("사실, 숫자, 표, 보기 등의 전제조건은 입력정보", system_prompt)
+        self.assertIn("일반 회계 지식, 계산과 논리적 추론", system_prompt)
+        self.assertIn("일부만 답할 수 있어도 확인 가능한 부분은 답하고", system_prompt)
         sent = json.loads(call["input"][1]["content"])
         self.assertEqual(sent["evidence"][0]["source_id"], "C1")
+
+    def test_original_images_are_included_with_user_question(self):
+        responses = FakeResponses(valid_payload())
+        generator = OpenAIAnswerGenerator(
+            SimpleNamespace(responses=responses), model="answer-model"
+        )
+        generator.generate(
+            "질문",
+            [candidate()],
+            image_urls=["data:image/png;base64,YQ=="],
+        )
+
+        content = responses.calls[0]["input"][1]["content"]
+        self.assertEqual(content[0]["type"], "input_text")
+        self.assertIn("질문", content[0]["text"])
+        self.assertEqual(content[1], {
+            "type": "input_image",
+            "image_url": "data:image/png;base64,YQ==",
+            "detail": "original",
+        })
+        self.assertIn("원본 이미지", responses.calls[0]["input"][0]["content"])
+
+    def test_image_only_input_omits_an_invented_question(self):
+        responses = FakeResponses(valid_payload())
+        generator = OpenAIAnswerGenerator(
+            SimpleNamespace(responses=responses), model="answer-model"
+        )
+        generator.generate(
+            "", [candidate()], image_urls=["data:image/png;base64,YQ=="],
+        )
+
+        content = responses.calls[0]["input"][1]["content"]
+        sent = json.loads(content[0]["text"])
+        self.assertNotIn("question", sent)
+        self.assertIn("evidence", sent)
 
     def test_limits_candidate_count_individual_and_total_text(self):
         payload = valid_payload()
@@ -139,11 +181,13 @@ class AnswerGenerationTests(unittest.TestCase):
         ).generate("질문", [candidate()])
         self.assertEqual(result, payload)
 
-    def test_api_failure_and_empty_candidates_return_safe_fallback(self):
+    def test_api_failure_and_empty_candidates_raise_generation_error(self):
         responses = FakeResponses(error=RuntimeError("temporary"))
         generator = OpenAIAnswerGenerator(SimpleNamespace(responses=responses), model="model")
-        self.assertEqual(generator.generate("질문", [candidate()])["evidence"], [])
-        self.assertEqual(generator.generate("질문", [])["evidence"], [])
+        with self.assertRaises(AnswerGenerationError):
+            generator.generate("질문", [candidate()])
+        with self.assertRaises(AnswerGenerationError):
+            generator.generate("질문", [])
         self.assertEqual(len(responses.calls), 1)
 
     def test_input_validation_rejects_empty_long_and_duplicate_inputs(self):

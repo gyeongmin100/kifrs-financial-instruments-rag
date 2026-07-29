@@ -1,13 +1,13 @@
 answer:
-  # 모델에 넘길 근거 개수의 상한. retrieval.yaml의 top_k + max_siblings(=20)보다 작으면
-  # 뒤에 붙는 형제 청크가 잘려 문단 복원이 무의미해진다.
+  # 모델에 넘길 근거 개수의 상한. retrieval.yaml의 top_k + max_siblings(=18)보다
+  # 작으면 형제 청크가 잘려 문단 복원이 무의미해진다.
   max_candidates: 20
   # 근거 하나에서 잘라 쓸 최대 글자수.
   max_candidate_chars: 1800
-  # 모든 근거를 합쳐 프롬프트에 넣을 총 글자수 상한. 실질적으로 이 값이 먼저 걸린다.
-  max_context_chars: 14000
-  # 질문 길이 상한. 초과하면 ValueError를 던진다(이미지 첨부 시 추출 텍스트가 붙는다).
-  max_question_chars: 2000
+  # 모든 근거 statement를 합쳐 프롬프트에 넣을 총 글자수 상한.
+  max_context_chars: 50000
+  # 답변 생성기에 전달하는 사용자 질문 길이 상한. 이미지 분석 결과는 붙이지 않는다.
+  max_question_chars: 12000
   # 추론 모델은 생각에 쓴 토큰도 여기에 포함한다. 3000에서는 긴 답변의 JSON이
   # 문장 중간에 끊겨 파싱이 실패했다. 한도일 뿐이라 쓴 만큼만 과금된다.
   max_output_tokens: 8000

@@ -1,22 +1,32 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+import logging
+import math
+import os
 from pathlib import Path
 import re
+from hashlib import sha256
 from typing import Any, Mapping, Sequence
 
 import yaml
 
 
+score_logger = logging.getLogger("accounting_rag.retrieval.scores")
+
+
 @dataclass(frozen=True)
 class HybridConfig:
-    dense_top_k: int = 20
-    sparse_top_k: int = 20
-    seed_top_k: int = 10
+    dense_top_k: int = 50
+    sparse_top_k: int = 50
+    seed_top_k: int = 6
     rrf_k: int = 60
     dense_weight: float = 1.0
     sparse_weight: float = 1.0
     embedding_dimensions: int = 3072
+    dense_min_score: float | None = None
+    sparse_min_score: float | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -28,19 +38,31 @@ class HybridConfig:
             raise ValueError("RRF weights must be non-negative")
         if self.dense_weight == 0 and self.sparse_weight == 0:
             raise ValueError("At least one RRF weight must be positive")
+        for name in ("dense_min_score", "sparse_min_score"):
+            value = getattr(self, name)
+            if value is not None and not math.isfinite(value):
+                raise ValueError(f"{name} must be finite or null")
 
     @classmethod
     def from_yaml(cls, path: Path) -> "HybridConfig":
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         values = raw.get("hybrid", raw)
         return cls(
-            dense_top_k=int(values.get("dense_top_k", 20)),
-            sparse_top_k=int(values.get("sparse_top_k", 20)),
-            seed_top_k=int(values.get("seed_top_k", 10)),
+            dense_top_k=int(values.get("dense_top_k", 50)),
+            sparse_top_k=int(values.get("sparse_top_k", 50)),
+            seed_top_k=int(values.get("seed_top_k", 6)),
             rrf_k=int(values.get("rrf_k", 60)),
             dense_weight=float(values.get("dense_weight", 1.0)),
             sparse_weight=float(values.get("sparse_weight", 1.0)),
             embedding_dimensions=int(values.get("embedding_dimensions", 3072)),
+            dense_min_score=(
+                None if values.get("dense_min_score") is None
+                else float(values["dense_min_score"])
+            ),
+            sparse_min_score=(
+                None if values.get("sparse_min_score") is None
+                else float(values["sparse_min_score"])
+            ),
         )
 
 
@@ -185,26 +207,81 @@ ORDER BY score DESC, chunk_id ASC
     def _rows(result: Any) -> list[dict[str, Any]]:
         return [record.data() if hasattr(record, "data") else dict(record) for record in result]
 
-    def search(self, question: str, *, standard_id: str | None = None,
-               zone: str | None = None) -> list[dict[str, Any]]:
+    def search_with_scores(self, question: str, *, standard_id: str | None = None,
+                           zone: str | None = None,
+                           sparse_query: str | None = None) -> dict[str, Any]:
         question = question.strip()
         if not question:
             raise ValueError("question must not be empty")
+        sparse_query = (sparse_query or question).strip()
+        if not sparse_query:
+            raise ValueError("sparse_query must not be empty")
         standard_id = normalize_standard_id(standard_id)
         embedding = self._embed(question)
         common = {"standard_id": standard_id, "zone": zone}
         with self.driver.session(database=self.database) as session:
-            dense = self._rows(session.run(
+            raw_dense = self._rows(session.run(
                 self._DENSE_QUERY, top_k=self.config.dense_top_k,
                 embedding=embedding, **common,
             ))
-            sparse = self._rows(session.run(
+            raw_sparse = self._rows(session.run(
                 self._SPARSE_QUERY, top_k=self.config.sparse_top_k,
-                lucene_query=escape_lucene_query(question), **common,
+                lucene_query=escape_lucene_query(sparse_query), **common,
             ))
-        return reciprocal_rank_fusion(
+        dense = [
+            row for row in raw_dense
+            if self.config.dense_min_score is None
+            or float(row["score"]) >= self.config.dense_min_score
+        ]
+        sparse = [
+            row for row in raw_sparse
+            if self.config.sparse_min_score is None
+            or float(row["score"]) >= self.config.sparse_min_score
+        ]
+        fused = reciprocal_rank_fusion(
             dense, sparse, rrf_k=self.config.rrf_k,
             dense_weight=self.config.dense_weight,
             sparse_weight=self.config.sparse_weight,
             top_k=self.config.seed_top_k,
         )
+        if os.getenv("RETRIEVAL_SCORE_LOG") == "1":
+            event: dict[str, Any] = {
+                "event": "retrieval_scores",
+                "question_hash": sha256(question.encode("utf-8")).hexdigest(),
+                "filters": {"standard_id": standard_id, "zone": zone},
+                "thresholds": {
+                    "dense": self.config.dense_min_score,
+                    "sparse": self.config.sparse_min_score,
+                },
+                "dense": [
+                    {
+                        "chunk_id": str(row["chunk_id"]),
+                        "rank": rank,
+                        "score": float(row["score"]),
+                        "passed": row in dense,
+                    }
+                    for rank, row in enumerate(raw_dense, start=1)
+                ],
+                "sparse": [
+                    {
+                        "chunk_id": str(row["chunk_id"]),
+                        "rank": rank,
+                        "score": float(row["score"]),
+                        "passed": row in sparse,
+                    }
+                    for rank, row in enumerate(raw_sparse, start=1)
+                ],
+                "selected_chunk_ids": [row["chunk_id"] for row in fused],
+            }
+            if os.getenv("RETRIEVAL_SCORE_LOG_INCLUDE_QUESTION") == "1":
+                event["question"] = question
+            score_logger.info(json.dumps(event, ensure_ascii=False, separators=(",", ":")))
+        return {"dense": raw_dense, "sparse": raw_sparse, "results": fused}
+
+    def search(self, question: str, *, standard_id: str | None = None,
+               zone: str | None = None,
+               sparse_query: str | None = None) -> list[dict[str, Any]]:
+        return self.search_with_scores(
+            question, standard_id=standard_id, zone=zone,
+            sparse_query=sparse_query,
+        )["results"]

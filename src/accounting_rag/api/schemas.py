@@ -24,11 +24,16 @@ Zone = Literal[
 ]
 AnswerStatus = Literal["answered", "insufficient"]
 AnswerReason = Literal[
+    # 관련성 임계값을 통과한 근거를 모델에 제공해 응답을 생성한 경우.
+    "evidence_available",
+    # 구버전 answered 응답과의 호환용.
     "sufficient",
     # 답변 생성기가 제공된 근거로는 답할 수 없다고 스스로 밝힌 경우.
     "self_declined",
     # 검색이 아무 문단도 돌려주지 않아 생성 단계까지 가지 못한 경우.
     "no_evidence_found",
+    # 검색 후보는 있었지만 모두 관련성 점수 임계값에 미달한 경우.
+    "no_supported_evidence",
 ]
 
 

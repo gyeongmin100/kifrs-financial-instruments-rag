@@ -13,6 +13,10 @@ import yaml
 logger = logging.getLogger(__name__)
 
 
+class AnswerGenerationError(RuntimeError):
+    """The model call or its structured response could not be validated."""
+
+
 @dataclass(frozen=True)
 class AnswerConfig:
     # 검색이 돌려주는 최대 개수(top_k + max_siblings)보다 크게 잡는다. 이 값이 더 작으면
@@ -20,7 +24,7 @@ class AnswerConfig:
     max_candidates: int = 20
     max_candidate_chars: int = 1800
     max_context_chars: int = 14000
-    max_question_chars: int = 2000
+    max_question_chars: int = 12000
     # 추론 모델은 생각하는 데 쓴 토큰도 이 한도에 포함한다. 값이 작으면 JSON이 문장
     # 중간에서 끊겨 파싱 자체가 실패한다. 한도일 뿐이라 실제 사용량만큼만 과금된다.
     max_output_tokens: int = 8000
@@ -59,34 +63,24 @@ _ANSWER_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
-_SYSTEM_PROMPT = """당신은 K-IFRS 금융상품 질의에 답하는 근거 중심 회계 전문가다.
-반드시 제공된 evidence만 사용하고 외부 지식이나 제공되지 않은 사실을 추가하지 않는다.
-출력은 결론(conclusion), 판단과정(reasoning), 근거(evidence)의 세 필드뿐이다.
+_SYSTEM_PROMPT = """당신은 K-IFRS 제1032호, 제1039호, 제1107호, 제1109호 금융상품 질의에 답하는 회계 전문가다.
+출력은 결론(conclusion), 판단과정(reasoning), 근거(evidence)의 세 필드로 작성한다.
 
 규칙:
-1. 결론과 판단과정의 사실 또는 회계 판단 문장 끝에는 반드시 [E1] 같은 evidence_id를 붙인다.
-2. reasoning의 각 원소는 한 가지 판단 단계만 담는다.
-3. evidence에는 실제로 인용한 evidence_id만 문자열로 나열한다. 예: ["E1", "E3"]
-   출처와 원문은 시스템이 채우므로 옮겨 적지 않는다.
-4. 근거 원문의 의미를 확대하거나 서로 다른 조건을 임의로 합치지 않는다.
-5. 결론에 필요한 조건, 예외 또는 사실관계가 부족하면 단정하지 않는다. 그 문장은
-   '근거 부족:'으로 시작하여 무엇이 부족한지 구체적으로 밝힌다. 이 메타 문장에는 인용이 없어도 된다.
-6. 질문에 답할 근거가 전혀 없으면 결론을 반드시 '근거 부족:'으로 시작하고 evidence는 빈 배열로 둔다.
-   '답변할 수 없습니다' 같은 다른 표현을 쓰지 않는다.
-7. 질문 형식에 맞춰 스스로 답한다. 보기가 있으면 각 보기를 근거와 대조한 뒤 결론에 선택지를 명시하고,
-   계산이 필요하면 판단과정에 사용한 값·식·단위와 계산 결과를 명시한다.
-8. 한국어로 간결하게 작성한다."""
+1. 제공된 evidence를 회계기준 판단의 최우선 근거로 사용한다.
+2. 질문에 포함된 사실, 숫자, 표, 보기 등의 전제조건은 입력정보로 사용한다.
+3. evidence와 충돌하지 않는 범위에서 일반 회계 지식, 계산과 논리적 추론을 사용할 수 있다. 충돌하면 evidence를 따른다.
+4. evidence로 뒷받침되는 회계 판단에는 [E1] 같은 evidence_id를 붙이고, evidence에는 실제 인용한 ID만 나열한다.
+5. evidence에 없는 내용을 evidence가 규정한 것처럼 인용하거나 근거의 의미를 확대하지 않는다.
+6. 일부만 답할 수 있어도 확인 가능한 부분은 답하고, 부족한 정보만 구체적으로 밝힌다.
+7. 보기나 계산이 있으면 주요 계산과정과 최종 선택지를 명시한다.
+8. 금융상품 기준서 범위를 벗어난 질문에는 범위를 벗어났다고 설명한다.
+9. 결론은 두괄식으로 작성한다. 정답, 최종 선택지 또는 핵심 회계처리를 첫 문장에 직접 제시하고, 부연 설명과 계산과정은 판단과정에서 작성한다.
+10. 한국어로 간결하게 작성한다.
+
+첨부된 원본 이미지가 제공되면 이미지의 사실, 숫자, 표와 보기를 직접 확인하여 답한다."""
 
 _MARKER_RE = re.compile(r"\[(E\d+)\]")
-_INSUFFICIENT_PREFIXES = ("근거 부족:", "답변 불가:")
-
-
-def _fallback() -> dict[str, Any]:
-    return {
-        "conclusion": "근거 부족: 검증된 답변을 생성하지 못했습니다.",
-        "reasoning": ["근거 부족: 생성 결과를 검증하지 못해 추가 확인이 필요합니다."],
-        "evidence": [],
-    }
 
 
 def _citation(candidate: Mapping[str, Any], chunk_id: str) -> str:
@@ -198,22 +192,35 @@ class OpenAIAnswerGenerator:
         self.config = config or AnswerConfig()
 
     def generate(self, question: str,
-                 candidates: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+                 candidates: Sequence[Mapping[str, Any]], *,
+                 image_urls: Sequence[str] = ()) -> dict[str, Any]:
         question = question.strip()
-        if not question:
+        if not question and not image_urls:
             raise ValueError("question must not be empty")
         if len(question) > self.config.max_question_chars:
             raise ValueError("question exceeds max_question_chars")
         offered = prepare_evidence_catalog(candidates, self.config)
         if not offered:
-            return _fallback()
-        body = {"question": question, "evidence": offered}
+            raise AnswerGenerationError("no usable evidence candidates")
+        body = {"evidence": offered}
+        if question:
+            body["question"] = question
+        user_content: str | list[dict[str, str]] = json.dumps(
+            body, ensure_ascii=False,
+        )
+        if image_urls:
+            user_content = [{"type": "input_text", "text": user_content}]
+            user_content.extend({
+                "type": "input_image",
+                "image_url": image_url,
+                "detail": "original",
+            } for image_url in image_urls)
         try:
             response = self.client.responses.create(
                 model=self.model,
                 input=[
                     {"role": "system", "content": _SYSTEM_PROMPT},
-                    {"role": "user", "content": json.dumps(body, ensure_ascii=False)},
+                    {"role": "user", "content": user_content},
                 ],
                 text={
                     "format": {
@@ -231,5 +238,5 @@ class OpenAIAnswerGenerator:
                 raise ValueError("answer response has no structured output text")
             return _assemble_answer(json.loads(output_text), offered)
         except Exception as error:
-            logger.warning("answer generation fallback: %s: %s", type(error).__name__, error)
-            return _fallback()
+            logger.warning("answer generation failed: %s: %s", type(error).__name__, error)
+            raise AnswerGenerationError("answer generation failed") from error

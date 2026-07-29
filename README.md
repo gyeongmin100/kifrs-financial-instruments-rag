@@ -1,9 +1,8 @@
 # K-IFRS Financial Instruments QA
 
-https://accounting-rag.pages.dev
+K-IFRS 제1032호·제1039호·제1107호·제1109호를 구조화해 Neo4j에 적재한 금융상품 텍스트·이미지 질의응답 서비스입니다. 검색한 기준서 원문을 최우선 근거로 삼고, 질문에 주어진 사실·숫자·표와 일반 회계 지식·계산·논리적 추론을 함께 사용합니다.
 
-K-IFRS 제1032호·제1039호·제1107호·제1109호를 구조화해 Neo4j에 적재하고, 기준서 원문에 근거해서만 답하는 금융상품 텍스트·이미지 질의응답 서비스입니다.
-
+라이브: https://accounting-rag.pages.dev
 
 ## 서비스 화면
 
@@ -11,47 +10,54 @@ K-IFRS 제1032호·제1039호·제1107호·제1109호를 구조화해 Neo4j에 �
 
 ## 실제 사례 — 2026 CPA 1차 회계학
 
-아래는 2026년 공인회계사 제1차시험 회계학의 금융상품 관련 문항입니다. 금융부채의 계약조건 변경 시 제거조건 충족 여부에 따라 당기손익이 얼마나 감소하는지를 묻습니다.
+아래는 2026년 공인회계사 제1차시험 회계학의 금융상품 관련 문항입니다. 금융부채의 계약조건 변경 시 제거조건 충족 여부와 조건변경손익을 묻습니다.
 
 <p align="center">
   <img src="docs/images/cpa-2026-financial-instruments-question.png" alt="2026 CPA 1차 회계학 금융상품 문제" width="500">
 </p>
 
-동일한 문제 이미지를 범용 GPT와 AI Accountant에 각각 입력했습니다.
+이 문항의 회귀 기준은 **⑤ ₩182,891**입니다.
 
-| 범용 GPT | AI Accountant |
-|---|---|
-| **⑤를 선택** | **③을 선택 — 정답** |
-| <img src="docs/images/gpt-answer.png" alt="범용 GPT가 5번을 선택한 답변" width="520"> | <img src="docs/images/ai-accountant-answer.png" alt="AI Accountant가 정답 3번을 선택한 답변" width="520"> |
+1. 최초 장부금액: `₩30,000 × 2.7232 + ₩1,000,000 × 0.8638 = ₩945,496`
+2. 조건변경 직전 장부금액: `₩945,496 × 1.05 - ₩30,000 = ₩962,771`
+3. 변경 현금흐름을 최초 유효이자율 5%로 할인: `₩10,000 × 2.7232 + ₩950,000 × 0.8638 = ₩847,842`
+4. 차이 `₩114,929`은 기존 장부금액의 약 11.94%이므로 제거조건을 충족합니다.
+5. 신규 부채 공정가치: `₩10,000 × 2.5770 + ₩950,000 × 0.7938 = ₩779,880`
+6. 조건변경이익: `₩962,771 - ₩779,880 = ₩182,891`
 
-범용 GPT는 ⑤를 답으로 제시했지만, AI Accountant는 검색한 K-IFRS 근거와 계산 과정을 제시하며 정답인 ③을 선택했습니다.
-
-> 이 결과는 위 문항에 대한 단일 비교 사례입니다. 모든 회계 문제에서 동일한 정확도를 보장하지는 않습니다.
+최종 답변 모델에는 추출 텍스트 대신 원본 이미지가 직접 전달되지만, 작은 글자·복잡한 표·유사한 숫자에 대한 비전 판독 오류 가능성은 남아 있습니다.
 
 ## 한눈에 보는 질의 흐름
 
-핵심 검색·답변 경로는 세 단계입니다. 텍스트 질문은 OpenAI를 **임베딩 1회 + 답변 생성 1회** 호출하고, 이미지를 첨부하면 앞단의 이미지 판독 호출 1회가 추가됩니다.
+텍스트 질문은 OpenAI를 **임베딩 1회 + 답변 생성 1회** 호출합니다. 이미지를 첨부하면 검색어 생성을 위한 이미지 분석 호출 1회가 앞단에 추가되며, 이 분석 결과는 검색에만 사용됩니다.
 
 ```text
-질문 (텍스트 최대 2,000자, 이미지 선택)
- │     이미지 첨부 시: 비전 모델로 문구·숫자·표 구조를 텍스트화
+사용자 질문(선택) + 원본 이미지(선택)
  │
- ▼ ① Hybrid 검색                         retrieval/hybrid.py
- │     Dense 벡터 top 20 ─┐
- │                        ├─ weighted RRF ─→ seed 최대 12개
- │     CJK Sparse  top 20 ─┘
- │                                      └→ 요청 top_k만 전달 (웹 기본 10)
+ ├─ 이미지가 있으면 검색정보 생성             api/dependencies.py
+ │    semantic_query → Dense 검색
+ │    keywords       → Sparse 검색
+ │    정답·계산·전체 OCR 텍스트는 생성하지 않음
  │
- ▼ ② 형제 청크 보강                       retrieval/pipeline.py
- │     같은 Paragraph에서 나온 나머지 Chunk를 최대 8개까지 덧붙임
+ ▼ ① Hybrid 검색                             retrieval/hybrid.py
+ │     Dense 벡터 top 50 ─┐
+ │                        ├─ 원점수 임계값(Dense 0.60 / Sparse 30.0)
+ │     CJK Sparse  top 50 ─┘  → weighted RRF → seed 최대 10개
  │
- ▼ ③ 답변 생성 (OpenAI Structured Output)  generation/answer.py
- │     근거로 답할 수 없으면 모델이 결론을 '근거 부족:'으로 시작
+ ▼ ② 형제 청크 보강                          retrieval/pipeline.py
+ │     같은 Paragraph에서 나온 나머지 Chunk를 질문 전체에서 최대 8개 추가
  │
- ▼ 결론 / 판단 과정 / 근거
+ ▼ ③ 답변 생성 (OpenAI Structured Output)     generation/answer.py
+ │     사용자 질문(있는 경우) + 원본 이미지 + evidence만 입력
+ │     이미지 검색분석 결과는 최종 모델에 전달하지 않음
+ │     evidence 최대 20개·항목당 1,800자·전체 50,000자
+ │
+ ▼ 두괄식 결론 / 판단 과정 / 근거
 ```
 
-**답변 이후 별도 판정 게이트가 없습니다.** 이전에는 기계 판정 6종, 의미 판정 LLM, 근거 필터, 인용 검증까지 네 개의 거절 지점이 있었고 정상 질문의 60%가 기각됐습니다. 지금은 "답할 수 있는지"를 답변 모델 하나가 판단하고, 근거가 없거나 모델이 스스로 거절한 경우만 `insufficient`로 분류합니다.
+**답변 이후 별도 판정 게이트가 없습니다.** 이전에는 기계 판정 6종, 의미 판정 LLM, 근거 필터, 인용 검증까지 네 개의 거절 지점이 있었습니다. 지금은 임계값 통과 청크가 0개일 때만 `insufficient`로 분류하고, 청크가 하나라도 있으면 모델 응답을 `answered / evidence_available`로 반환합니다.
+
+Dense·Sparse 후보를 각각 50개까지 가져온 뒤 원점수 임계값(Dense 0.60, Sparse 30.0)을 통과한 후보만 RRF에 넣고 최종 seed는 10개로 제한합니다. Dense 하한은 검색 누락을 줄이기 위해 기존 0.70에서 0.60으로 완화했으며, 재랭커가 없으므로 낮은 유사도의 문단이 포함될 수 있다는 절충이 있습니다.
 
 ### 왜 이렇게 바꿨나
 
@@ -63,7 +69,9 @@ K-IFRS 제1032호·제1039호·제1107호·제1109호를 구조화해 Neo4j에 �
 
 같은 질문 6개로 측정한 결과 **답변 성공 2/6 → 5/6**. 범위 밖 질문("오늘 서울 날씨")은 여전히 거절합니다.
 
-## 헛소리를 막는 장치 — 검사하지 않고, 물어보지 않는다
+## 답변 원칙과 출처 위조 방지
+
+답변 모델은 검색된 evidence를 회계기준 판단의 최우선 근거로 사용합니다. evidence와 충돌하지 않는 범위에서는 질문에 포함된 사실·숫자·표와 일반 회계 지식·계산·논리적 추론을 함께 사용합니다. 결론은 두괄식으로 작성해 정답, 최종 선택지 또는 핵심 회계처리를 첫 문장에 제시합니다.
 
 출처를 지어내지 못하게 하는 방법은 두 가지입니다. 모델에게 물어본 뒤 대조하거나, **아예 묻지 않거나.** 두 번째를 택했습니다.
 
@@ -98,9 +106,9 @@ K-IFRS 제1032호·제1039호·제1107호·제1109호를 구조화해 Neo4j에 �
 
 **바꾼 뒤 같은 14개 질문에서 검증으로 폐기된 답변은 0건입니다.**
 
-### 거절 판정
+### 답변 상태 판정
 
-근거를 하나도 인용하지 않으면 표현과 무관하게 근거 부족으로 봅니다. 접두사(`근거 부족:`)만 믿으면 모델이 "답변할 수 없습니다" 같은 다른 말로 거절했을 때 정상 답변으로 잘못 분류됩니다.
+검색 결과가 0건이거나 모든 후보가 원점수 임계값에 미달한 경우에만 생성 전에 `insufficient`로 판정합니다. 통과 청크가 하나라도 있으면 빈 인용 목록, 부분 답변, 범위 밖 설명도 문자열로 다시 판정하지 않고 모델 응답을 그대로 표시합니다.
 
 ## 하위항목(⑴ → ㈎ → ①)을 다루는 방식
 
@@ -149,7 +157,9 @@ LangChain·LangGraph 없이 Neo4j Driver와 OpenAI SDK를 직접 호출합니다
 ## 웹 UI와 이미지 입력
 
 - 질문은 최대 **2,000자**이며, PNG·JPEG·WEBP·GIF 이미지를 최대 4장, 장당 5MB까지 첨부할 수 있습니다.
-- 첨부 이미지는 비전 모델이 검색 가능한 텍스트로 옮긴 뒤 질문에 덧붙이고, 기존 Hybrid 검색과 답변 생성 경로를 그대로 사용합니다. 서버에 파일로 저장하지 않으며 OpenAI 호출도 `store=False`입니다.
+- 첨부 이미지 분석 모델은 전체 OCR이나 정답 대신 `semantic_query`와 `keywords`만 구조화 출력합니다. Dense 검색은 `semantic_query`, Sparse 검색은 `keywords`를 사용합니다.
+- 최종 답변 모델에는 사용자 질문(있는 경우), 검색된 evidence, 원본 이미지만 전달합니다. 이미지 검색분석 결과나 임의의 이미지 풀이 지시는 전달하지 않습니다.
+- 이미지는 서버에 파일로 저장하지 않으며 OpenAI 호출은 모두 `store=False`입니다. 검색분석에는 `detail=high`, 최종 답변에는 `detail=original`을 사용합니다.
 - 웹 UI는 `request_id`가 있는 비동기 작업을 생성하고 폴링합니다. 같은 ID의 재요청은 같은 작업을 돌려줘 네트워크 재시도 중 중복 실행을 막습니다.
 - 대화 기록은 최대 30개를 브라우저 `localStorage`에만 보관합니다. 진행 중 요청의 재시도 payload는 `IndexedDB`에 임시 보관하고 완료 시 삭제합니다.
 
@@ -176,9 +186,19 @@ LangChain·LangGraph 없이 Neo4j Driver와 OpenAI SDK를 직접 호출합니다
 
 **질의 시점에 사용하는 것은 `chunk_embedding_vector`, `chunk_fulltext`, `DERIVED_FROM` 세 가지뿐입니다.** 나머지 그래프(REFERS_TO, MENTIONS, Concept 등)는 적재·검증되어 있지만 현재 검색 경로에서는 읽지 않습니다. 색인 파이프라인의 산출물이자 향후 확장 여지로 남아 있습니다.
 
-## 색인 데이터
+## 색인 파이프라인 (질의와 별개, 사전 1회 실행)
 
-서비스는 K-IFRS 원문을 문단 단위로 구조화하고 검색용 청크와 임베딩을 생성해 미리 적재한 Neo4j AuraDB를 사용합니다. 원문과 색인 생성 산출물은 라이선스와 저장소 크기 때문에 공개 저장소에 포함하지 않습니다.
+```text
+HWPX 원본 4개
+ ▼ parse_all_standards.py     문단·블록·표·각주·참조 추출 → data/processed/
+ ▼ map_pdf_pages.py           PDF 1,671쪽과 문단 매핑
+ ▼ build_chunks.py            검색용 Chunk 생성 → data/chunks/
+ ▼ build_embeddings.py        text-embedding-3-large 3,072차원 → data/embeddings/
+ ▼ build_semantic_kg.py       공식 정의 기반 Concept·MENTIONS → data/semantic/
+ ▼ load_neo4j.py / load_semantic_neo4j.py / load_embeddings_neo4j.py
+```
+
+각 단계마다 `validate_*.py`가 짝으로 있고, 품질 보고서를 `data/**/*_QUALITY_REPORT.md`에 남깁니다.
 
 ## 배포 구성
 
@@ -188,13 +208,7 @@ LangChain·LangGraph 없이 Neo4j Driver와 OpenAI SDK를 직접 호출합니다
 | 백엔드 | Render 무료 (Docker) | 15분 유휴 시 슬립 → 첫 요청 최대 1분 |
 | 데이터베이스 | Neo4j AuraDB Free | 3일 미사용 시 일시정지, 30일 지속 시 삭제 |
 
-배포 검토 당시 Hugging Face Spaces 대신 Render를 선택했습니다. 백엔드는 이 저장소를 Render의 Docker 웹 서비스로 연결하고 위 환경변수를 등록합니다. 프론트엔드는 다음 명령으로 정적 번들을 만든 뒤 `deploy/frontend_dist/`를 Cloudflare Pages에 업로드합니다.
-
-```powershell
-python scripts/build_frontend_dist.py --api-base https://<서비스명>.onrender.com
-```
-
-배포 전 AuraDB의 `chunk_embedding_vector`·`chunk_fulltext` 인덱스가 모두 `ONLINE`인지 확인해야 합니다. Render에는 `CORS_ALLOW_ORIGINS`, `ASK_RATE_LIMIT_PER_HOUR`, `TRUST_PROXY_HEADERS`를 운영 환경에 맞게 추가합니다. 무료 Render는 15분 유휴 후 슬립하며 AuraDB Free는 3일 미사용 시 일시정지될 수 있습니다.
+배포 검토 당시 Hugging Face Spaces 대신 Render를 선택했습니다. 현재 배포 절차는 `DEPLOYMENT.md`를 참고하세요.
 
 ## 로컬 실행
 
@@ -204,7 +218,19 @@ Copy-Item .env.example .env    # OpenAI 키와 Neo4j 접속정보 입력
 python scripts/run_api.py      # http://127.0.0.1:8000/
 ```
 
-질의 파이프라인이 실제로 사용하는 환경변수는 `NEO4J_URI` · `NEO4J_USERNAME` · `NEO4J_PASSWORD` · `NEO4J_DATABASE` · `OPENAI_API_KEY` · `OPENAI_EMBEDDING_MODEL` · `OPENAI_CHAT_MODEL`입니다.
+질의 파이프라인이 실제로 사용하는 환경변수는 `NEO4J_URI` · `NEO4J_USERNAME` · `NEO4J_PASSWORD` · `NEO4J_DATABASE` · `OPENAI_API_KEY` · `OPENAI_EMBEDDING_MODEL` · `OPENAI_CHAT_MODEL`입니다. `OPENAI_RERANK_MODEL`은 재정렬 제거 후 어떤 모델 호출에도 사용하지 않습니다.
+
+## CLI
+
+```powershell
+# 검색만 확인 (OpenAI는 임베딩 1회만 호출)
+python scripts/query_retrieval.py "기대신용손실은 언제 인식하는가?"
+
+# 답변까지 (임베딩 1회 + 생성 1회)
+python scripts/ask.py "위험회피회계를 적용하기 위한 요건은?" --debug
+```
+
+`query_retrieval.py`는 각 청크의 `candidate_source`가 `hybrid`인지 `sibling`인지 표시하므로, 형제 보강이 실제로 무엇을 끌어왔는지 볼 수 있습니다.
 
 ## API
 
@@ -222,33 +248,22 @@ python scripts/run_api.py      # http://127.0.0.1:8000/
 
 | status | reason | 의미 |
 |---|---|---|
-| `answered` | `sufficient` | 근거에 기반한 답변 |
-| `insufficient` | `self_declined` | 모델이 근거로 답할 수 없다고 밝힘 |
+| `answered` | `evidence_available` | 임계값 통과 근거를 모델에 제공해 생성한 응답 |
 | `insufficient` | `no_evidence_found` | 검색이 아무 문단도 반환하지 않음 |
+| `insufficient` | `no_supported_evidence` | 검색 후보가 모두 관련성 임계값에 미달 |
 
 ## 알려진 한계
 
 - **출처는 보장되지만 해석은 보장되지 않습니다.** 카드에 뜨는 출처와 원문은 DB에서 가져온 값이라 100% 정확합니다. 그러나 본문 문장이 그 원문을 올바르게 해석했는지 확인하는 장치는 없습니다.
 - **어느 근거를 인용할지는 모델이 정합니다.** `[E1]`을 붙였다고 그 문단이 실제로 그 문장을 뒷받침한다는 보장은 없습니다. 사용자가 카드의 원문과 대조할 수 있게 만든 것이 대응책입니다.
-- **답변이 근거의 범위를 넘는지 판단할 장치가 없습니다.** 이전의 의미 판정 LLM이 그 역할을 일부 했지만 기각률이 너무 높아 제거했습니다.
-- **거절 화면이 모델의 설명을 보여주지 않습니다.** 모델이 "제1012호 소관"처럼 구체적으로 안내해도 프론트엔드는 고정 문구로 대체합니다.
-- **이미지 판독은 OCR 오류가 날 수 있습니다.** 작은 글자, 복잡한 표, 선택지 번호나 유사한 숫자를 잘못 옮길 수 있으므로 중요한 계산 문제는 원본과 추출 결과를 함께 확인해야 합니다.
+- **일반 회계 지식 사용을 기계적으로 검증하지 않습니다.** 프롬프트는 evidence를 최우선으로 두지만 evidence 밖 보조 지식이 정확한지 별도 판정하지 않습니다.
+- **고정 거절 화면은 임계값을 통과한 검색 근거가 0건일 때만 사용합니다.** 임계값 통과 청크가 있으면 부분 답변이나 범위 밖 설명도 모델 문구 그대로 표시합니다.
+- **원본 이미지를 직접 입력해도 비전 판독 오류는 남습니다.** 작은 글자, 복잡한 표, 선택지 번호나 유사한 숫자를 잘못 읽을 수 있으며, 검색용 이미지 분석과 최종 답변 판독은 서로 독립된 호출입니다.
 - **그래프 관계 대부분이 질의에 쓰이지 않습니다.** `REFERS_TO` 12,796개, `MENTIONS` 17,712개는 적재만 되어 있습니다. `REFERS_TO`를 1-hop 확장에 써보는 안을 검토했으나, 청크의 65%에서 확장 결과가 0개이고 최대 63개까지 튀어 도입하지 않았습니다.
 - **결과에 변동성이 있습니다.** 답변 생성 LLM에 `temperature`를 설정하지 않아 같은 질문이 다르게 답할 수 있습니다. 재정렬 제거로 변동 폭은 크게 줄었지만 0은 아닙니다.
 
 ## 저장소 정책
 
 - `.env`, API 키, DB 비밀번호는 커밋하지 않습니다.
-- 기준서 원본(PDF/HWP/HWPX)과 색인 생성 산출물은 커밋하지 않습니다.
-- 공개 저장소에는 현재 서비스의 실행·배포에 필요한 코드와 설정만 포함합니다.
-
-## 저장소 구조
-
-```text
-config/                  검색·답변 설정
-docs/images/             README 서비스 화면 자료
-scripts/                 로컬 실행·프론트엔드 배포 도구
-src/accounting_rag/      FastAPI, Hybrid 검색, 답변 생성
-tests/                   현재 서비스 경로의 회귀 테스트
-Dockerfile               Render 백엔드 이미지
-```
+- 기준서 원본(PDF/HWP/HWPX)과 `data/` 파생 데이터는 커밋하지 않습니다.
+- 공개 저장소에는 코드, 스키마, 설정 예시, 문서만 포함합니다.

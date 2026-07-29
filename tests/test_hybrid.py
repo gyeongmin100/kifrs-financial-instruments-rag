@@ -1,8 +1,11 @@
+import json
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 SRC = Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
@@ -87,8 +90,19 @@ class HybridTests(unittest.TestCase):
             path.write_text("hybrid:\n  dense_top_k: 7\n  sparse_weight: 1.5\n", encoding="utf-8")
             config = HybridConfig.from_yaml(path)
         self.assertEqual(config.dense_top_k, 7)
-        self.assertEqual(config.sparse_top_k, 20)
+        self.assertEqual(config.sparse_top_k, 50)
         self.assertEqual(config.sparse_weight, 1.5)
+
+    def test_config_loads_optional_score_thresholds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "retrieval.yaml"
+            path.write_text(
+                "hybrid:\n  dense_min_score: 0.75\n  sparse_min_score: 3.5\n",
+                encoding="utf-8",
+            )
+            config = HybridConfig.from_yaml(path)
+        self.assertEqual(config.dense_min_score, 0.75)
+        self.assertEqual(config.sparse_min_score, 3.5)
 
     def test_search_uses_injected_clients_and_parameters(self):
         session = FakeSession([row("D", 0.9)], [row("S", 4.0)])
@@ -114,6 +128,70 @@ class HybridTests(unittest.TestCase):
         self.assertEqual(sparse_parameters["zone"], "standard_body")
         self.assertEqual(sparse_parameters["lucene_query"], "금융자산\\+\\(제거\\)\\?")
         self.assertEqual({item["chunk_id"] for item in result}, {"D", "S"})
+
+    def test_search_accepts_a_separate_sparse_query(self):
+        session = FakeSession([row("D", 0.9)], [row("S", 4.0)])
+        embeddings = FakeEmbeddings()
+        retriever = HybridRetriever(
+            FakeDriver(session), SimpleNamespace(embeddings=embeddings),
+            database="neo4j", embedding_model="model",
+        )
+
+        retriever.search(
+            "금융부채 조건변경의 회계처리",
+            sparse_query="금융부채 조건변경 유효이자율",
+        )
+
+        self.assertEqual(
+            embeddings.calls[0]["input"], ["금융부채 조건변경의 회계처리"],
+        )
+        self.assertEqual(
+            session.calls[1][1]["lucene_query"],
+            "금융부채 조건변경 유효이자율",
+        )
+
+    def test_thresholds_filter_each_channel_before_rrf(self):
+        session = FakeSession(
+            [row("D-low", 0.7), row("D-pass", 0.9)],
+            [row("S-pass", 5.0), row("S-low", 2.0)],
+        )
+        retriever = HybridRetriever(
+            FakeDriver(session), SimpleNamespace(embeddings=FakeEmbeddings()),
+            database="neo4j", embedding_model="model",
+            config=HybridConfig(dense_min_score=0.8, sparse_min_score=4.0),
+        )
+        result = retriever.search("질문")
+        self.assertEqual({item["chunk_id"] for item in result}, {"D-pass", "S-pass"})
+
+    def test_opt_in_score_log_contains_all_raw_rows_without_question(self):
+        session = FakeSession([row("D", 0.9)], [row("S", 4.0)])
+        retriever = HybridRetriever(
+            FakeDriver(session), SimpleNamespace(embeddings=FakeEmbeddings()),
+            database="neo4j", embedding_model="model",
+        )
+        environment = {
+            "RETRIEVAL_SCORE_LOG": "1",
+            "RETRIEVAL_SCORE_LOG_INCLUDE_QUESTION": "0",
+        }
+        with patch.dict(os.environ, environment, clear=False):
+            with self.assertLogs("accounting_rag.retrieval.scores", level="INFO") as captured:
+                retriever.search("금융자산")
+        payload = json.loads(captured.records[0].getMessage())
+        self.assertEqual(payload["event"], "retrieval_scores")
+        self.assertEqual(payload["dense"][0]["score"], 0.9)
+        self.assertEqual(payload["sparse"][0]["score"], 4.0)
+        self.assertNotIn("question", payload)
+
+    def test_search_with_scores_exposes_raw_channels_for_calibration(self):
+        session = FakeSession([row("D", 0.9)], [row("S", 4.0)])
+        retriever = HybridRetriever(
+            FakeDriver(session), SimpleNamespace(embeddings=FakeEmbeddings()),
+            database="neo4j", embedding_model="model",
+        )
+        snapshot = retriever.search_with_scores("금융자산")
+        self.assertEqual(snapshot["dense"][0]["chunk_id"], "D")
+        self.assertEqual(snapshot["sparse"][0]["chunk_id"], "S")
+        self.assertEqual({row["chunk_id"] for row in snapshot["results"]}, {"D", "S"})
 
     def test_empty_question_fails_before_external_calls(self):
         session = FakeSession([], [])

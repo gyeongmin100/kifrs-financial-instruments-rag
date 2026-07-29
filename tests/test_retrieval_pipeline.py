@@ -14,9 +14,20 @@ class FakeHybrid:
         self.seeds = seeds
         self.calls = []
 
-    def search(self, question, *, standard_id=None, zone=None):
-        self.calls.append({"question": question, "standard_id": standard_id, "zone": zone})
+    def search(self, question, *, standard_id=None, zone=None, sparse_query=None):
+        self.calls.append({
+            "question": question, "standard_id": standard_id, "zone": zone,
+            "sparse_query": sparse_query,
+        })
         return [dict(seed) for seed in self.seeds]
+
+
+class FakeScoredHybrid:
+    def __init__(self, dense, sparse, results):
+        self.snapshot = {"dense": dense, "sparse": sparse, "results": results}
+
+    def search_with_scores(self, question, *, standard_id=None, zone=None):
+        return self.snapshot
 
 
 class FakeSession:
@@ -60,6 +71,20 @@ class RetrievalPipelineTests(unittest.TestCase):
         self.assertEqual(hybrid.calls[0]["question"], "기대신용손실은?")
         self.assertEqual(hybrid.calls[0]["standard_id"], "1109")
 
+    def test_forwards_keyword_query_to_sparse_search(self):
+        hybrid = FakeHybrid([{"chunk_id": "C1", "text": "본문"}])
+        RetrievalPipeline(hybrid, FakeDriver(), database="neo4j").retrieve(
+            "금융부채 조건변경의 회계처리",
+            keyword_query="금융부채 조건변경 유효이자율",
+        )
+
+        self.assertEqual(
+            hybrid.calls[0]["question"], "금융부채 조건변경의 회계처리",
+        )
+        self.assertEqual(
+            hybrid.calls[0]["sparse_query"], "금융부채 조건변경 유효이자율",
+        )
+
     def test_appends_sibling_chunks_of_a_paragraph_split_across_chunks(self):
         hybrid = FakeHybrid([
             {"chunk_id": "KIFRS1032-11-C01", "text": "금융자산은 다음의 자산을 말한다."},
@@ -97,6 +122,17 @@ class RetrievalPipelineTests(unittest.TestCase):
             hybrid, FakeDriver(), database="neo4j", config=RetrievalConfig(max_siblings=0),
         ).retrieve("질문", top_k=3)
         self.assertEqual(output["result_count"], 3)
+
+    def test_reports_when_thresholds_remove_all_raw_candidates(self):
+        hybrid = FakeScoredHybrid(
+            dense=[{"chunk_id": "D1", "score": 0.4}],
+            sparse=[{"chunk_id": "S1", "score": 2.0}],
+            results=[],
+        )
+        output = RetrievalPipeline(hybrid, FakeDriver()).retrieve("질문")
+        self.assertEqual(output["raw_candidate_count"], 2)
+        self.assertTrue(output["threshold_filtered_all"])
+        self.assertEqual(output["results"], [])
 
     def test_empty_question_stops_before_dependencies(self):
         hybrid = FakeHybrid([])

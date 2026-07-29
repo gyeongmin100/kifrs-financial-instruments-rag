@@ -22,6 +22,7 @@ class FakePipeline:
     def __init__(self, result=None, error=None):
         self.result = result or {
             "status": "answered",
+            "reason": "evidence_available",
             "answer": {
                 "conclusion": "결론 [E1]",
                 "reasoning": ["판단 [E1]"],
@@ -100,7 +101,7 @@ class ApiTests(unittest.TestCase):
             })
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("diagnostics", response.json())
-        self.assertEqual(response.json()["reason"], "sufficient")
+        self.assertEqual(response.json()["reason"], "evidence_available")
         self.assertEqual(response.json()["conclusion"], "결론 [E1]")
         evidence = response.json()["evidence"][0]
         self.assertEqual(evidence["source_id"], "KIFRS1109-5.5.17")
@@ -173,13 +174,13 @@ class ApiTests(unittest.TestCase):
                 time.sleep(0.01)
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["status"], "complete")
-            self.assertEqual(response.json()["result"]["reason"], "sufficient")
+            self.assertEqual(response.json()["result"]["reason"], "evidence_available")
             self.assertEqual(response.json()["result"]["conclusion"], "결론 [E1]")
             self.assertEqual(client.delete(f"/v1/jobs/{job_id}").status_code, 204)
             self.assertEqual(client.get(f"/v1/jobs/{job_id}").status_code, 404)
 
     def test_insufficient_response_exposes_internal_reason(self):
-        for reason in ("self_declined", "no_evidence_found"):
+        for reason in ("self_declined", "no_evidence_found", "no_supported_evidence"):
             with self.subTest(reason=reason):
                 result = FakePipeline().result
                 result["status"] = "insufficient"
@@ -245,13 +246,17 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(first.json()["job_id"], retry.json()["job_id"])
         self.assertEqual(other.status_code, 429)
 
-    def test_image_is_converted_to_retrieval_text(self):
+    def test_image_creates_separate_dense_and_sparse_queries(self):
         pipeline = FakePipeline()
         seen = []
 
         def image_processor(question, images):
             seen.append((question, images))
-            return "이미지에서 추출한 회계 질문"
+            from accounting_rag.api.dependencies import ImageSearchQuery
+            return ImageSearchQuery(
+                "금융부채 조건변경의 회계처리",
+                ("금융부채", "조건변경", "유효이자율"),
+            )
 
         from accounting_rag.api.app import create_app
         with TestClient(create_app(lambda: pipeline, image_processor=image_processor)) as client:
@@ -262,7 +267,16 @@ class ApiTests(unittest.TestCase):
             })
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(seen[0][1]), 1)
-        self.assertEqual(pipeline.calls[0][0], "이미지에서 추출한 회계 질문")
+        self.assertEqual(pipeline.calls[0][0], "")
+        self.assertEqual(
+            pipeline.calls[0][1]["semantic_query"], "금융부채 조건변경의 회계처리",
+        )
+        self.assertEqual(
+            pipeline.calls[0][1]["keyword_query"], "금융부채 조건변경 유효이자율",
+        )
+        self.assertEqual(pipeline.calls[0][1]["image_urls"], [
+            "data:image/png;base64,YQ==",
+        ])
 
 
 if __name__ == "__main__":

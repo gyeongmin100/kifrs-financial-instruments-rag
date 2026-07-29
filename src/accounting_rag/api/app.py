@@ -16,7 +16,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from accounting_rag.api.dependencies import (
-    PipelineUnavailable, close_pipeline, get_pipeline, question_with_images,
+    ImageSearchQuery, PipelineUnavailable, close_pipeline, get_pipeline,
+    question_with_images,
 )
 from accounting_rag.api.schemas import (
     AskRequest, AskResponse, HealthResponse, ImageAttachment,
@@ -26,7 +27,7 @@ from accounting_rag.api.schemas import (
 
 logger = logging.getLogger(__name__)
 PipelineProvider = Callable[[], Any]
-ImageProcessor = Callable[[str, Sequence[ImageAttachment]], str]
+ImageProcessor = Callable[[str, Sequence[ImageAttachment]], ImageSearchQuery | str]
 STATIC_DIR = Path(__file__).with_name("static")
 JOB_TTL_SECONDS = 10 * 60
 
@@ -37,7 +38,10 @@ def _safe_diagnostics(result: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "retrieval": {
             key: retrieval.get(key)
-            for key in ("filters", "seed_count", "sibling_count", "result_count")
+            for key in (
+                "filters", "seed_count", "sibling_count", "result_count",
+                "raw_candidate_count", "threshold_filtered_all",
+            )
         },
         "status": result.get("status"),
         "reason": result.get("reason"),
@@ -205,12 +209,35 @@ def create_app(
     def run_request(request: AskRequest) -> AskResponse:
         try:
             pipeline = provider()
-            prepared_question = image_processor(request.question, request.images)
+            search_options: dict[str, str] = {}
+            if request.images:
+                prepared = image_processor(request.question, request.images)
+                if isinstance(prepared, str):
+                    semantic_query = prepared
+                    keyword_query = prepared
+                else:
+                    semantic_query = prepared.semantic_query
+                    keyword_query = prepared.keyword_query
+                answer_question = request.question.strip()
+                search_options = {
+                    "semantic_query": semantic_query,
+                    "keyword_query": keyword_query,
+                }
+            else:
+                answer_question = request.question
+            image_options = ({
+                "image_urls": [
+                    f"data:{image.mime_type};base64,{image.data}"
+                    for image in request.images
+                ],
+            } if request.images else {})
             result = pipeline.ask(
-                prepared_question,
+                answer_question,
                 standard_id=request.standard_id,
                 zone=request.zone,
                 top_k=request.top_k,
+                **search_options,
+                **image_options,
             )
         except ValueError as exc:
             logger.info("ask request rejected: %s", type(exc).__name__)
@@ -252,7 +279,7 @@ def create_app(
     def _answer_reason(result: Mapping[str, Any]) -> str:
         status = str(result.get("status") or "")
         if status == "answered":
-            return "sufficient"
+            return "evidence_available"
         if status == "generation_failed":
             return "generation_failed"
         sufficiency = result.get("sufficiency")

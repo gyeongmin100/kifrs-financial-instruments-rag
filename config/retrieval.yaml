@@ -1,15 +1,19 @@
 hybrid:
-  dense_top_k: 20
-  sparse_top_k: 20
-  seed_top_k: 12
+  # 임계값 측정 기간에는 넉넉히 가져오고 RRF에서 seed_top_k만 남긴다.
+  dense_top_k: 50
+  sparse_top_k: 50
+  seed_top_k: 10
   rrf_k: 60
   dense_weight: 1.0
   sparse_weight: 1.0
   embedding_dimensions: 3072
+  # 검색 누락을 줄이기 위해 Dense 하한을 완화했다. Sparse 하한은 기존 값을 유지한다.
+  dense_min_score: 0.60
+  sparse_min_score: 30.0
 
 retrieval:
   # 답변 생성기에 넘길 청크 수.
-  top_k: 12
+  top_k: 10
   # 하위항목(⑴ → ㈎ → ①)은 청킹 단계에서 이미 부모 줄기와 함께 한 청크에 담긴다.
   # 다만 문단이 길면 여러 청크로 갈리므로(전체 문단의 약 3%), 같은 문단의 나머지 청크를
   # 이 개수만큼 보강해 앞뒤가 잘린 채로 답변이 만들어지는 것을 막는다.
