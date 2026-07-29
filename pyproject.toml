@@ -1,14 +1,13 @@
 [project]
 name = "accounting-rag"
 version = "0.1.0"
-description = "K-IFRS financial instruments parsing and GraphRAG project"
+description = "K-IFRS financial instruments RAG service"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115,<1",
   "httpx>=0.27,<1",
   "neo4j>=5.28,<7",
   "openai>=1.0",
-  "pypdf>=6.0",
   "python-dotenv>=1.0",
   "PyYAML>=6.0",
   "uvicorn>=0.30,<1",

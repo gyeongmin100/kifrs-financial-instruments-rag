@@ -175,19 +175,9 @@ LangChain·LangGraph 없이 Neo4j Driver와 OpenAI SDK를 직접 호출합니다
 
 **질의 시점에 사용하는 것은 `chunk_embedding_vector`, `chunk_fulltext`, `DERIVED_FROM` 세 가지뿐입니다.** 나머지 그래프(REFERS_TO, MENTIONS, Concept 등)는 적재·검증되어 있지만 현재 검색 경로에서는 읽지 않습니다. 색인 파이프라인의 산출물이자 향후 확장 여지로 남아 있습니다.
 
-## 색인 파이프라인 (질의와 별개, 사전 1회 실행)
+## 색인 데이터
 
-```text
-HWPX 원본 4개
- ▼ parse_all_standards.py     문단·블록·표·각주·참조 추출 → data/processed/
- ▼ map_pdf_pages.py           PDF 1,671쪽과 문단 매핑
- ▼ build_chunks.py            검색용 Chunk 생성 → data/chunks/
- ▼ build_embeddings.py        text-embedding-3-large 3,072차원 → data/embeddings/
- ▼ build_semantic_kg.py       공식 정의 기반 Concept·MENTIONS → data/semantic/
- ▼ load_neo4j.py / load_semantic_neo4j.py / load_embeddings_neo4j.py
-```
-
-각 단계마다 `validate_*.py`가 짝으로 있고, 품질 보고서를 `data/**/*_QUALITY_REPORT.md`에 남깁니다.
+서비스는 K-IFRS 원문을 문단 단위로 구조화하고 검색용 청크와 임베딩을 생성해 미리 적재한 Neo4j AuraDB를 사용합니다. 원문과 색인 생성 산출물은 라이선스와 저장소 크기 때문에 공개 저장소에 포함하지 않습니다.
 
 ## 배포 구성
 
@@ -197,7 +187,13 @@ HWPX 원본 4개
 | 백엔드 | Render 무료 (Docker) | 15분 유휴 시 슬립 → 첫 요청 최대 1분 |
 | 데이터베이스 | Neo4j AuraDB Free | 3일 미사용 시 일시정지, 30일 지속 시 삭제 |
 
-배포 검토 당시 Hugging Face Spaces 대신 Render를 선택했습니다. 현재 배포 절차는 `DEPLOYMENT.md`를 참고하세요.
+배포 검토 당시 Hugging Face Spaces 대신 Render를 선택했습니다. 백엔드는 이 저장소를 Render의 Docker 웹 서비스로 연결하고 위 환경변수를 등록합니다. 프론트엔드는 다음 명령으로 정적 번들을 만든 뒤 `deploy/frontend_dist/`를 Cloudflare Pages에 업로드합니다.
+
+```powershell
+python scripts/build_frontend_dist.py --api-base https://<서비스명>.onrender.com
+```
+
+배포 전 AuraDB의 `chunk_embedding_vector`·`chunk_fulltext` 인덱스가 모두 `ONLINE`인지 확인해야 합니다. Render에는 `CORS_ALLOW_ORIGINS`, `ASK_RATE_LIMIT_PER_HOUR`, `TRUST_PROXY_HEADERS`를 운영 환경에 맞게 추가합니다. 무료 Render는 15분 유휴 후 슬립하며 AuraDB Free는 3일 미사용 시 일시정지될 수 있습니다.
 
 ## 로컬 실행
 
@@ -207,19 +203,7 @@ Copy-Item .env.example .env    # OpenAI 키와 Neo4j 접속정보 입력
 python scripts/run_api.py      # http://127.0.0.1:8000/
 ```
 
-질의 파이프라인이 실제로 사용하는 환경변수는 `NEO4J_URI` · `NEO4J_USERNAME` · `NEO4J_PASSWORD` · `NEO4J_DATABASE` · `OPENAI_API_KEY` · `OPENAI_EMBEDDING_MODEL` · `OPENAI_CHAT_MODEL`입니다. `OPENAI_RERANK_MODEL`은 재정렬 제거 후 어떤 모델 호출에도 사용하지 않습니다.
-
-## CLI
-
-```powershell
-# 검색만 확인 (OpenAI는 임베딩 1회만 호출)
-python scripts/query_retrieval.py "기대신용손실은 언제 인식하는가?"
-
-# 답변까지 (임베딩 1회 + 생성 1회)
-python scripts/ask.py "위험회피회계를 적용하기 위한 요건은?" --debug
-```
-
-`query_retrieval.py`는 각 청크의 `candidate_source`가 `hybrid`인지 `sibling`인지 표시하므로, 형제 보강이 실제로 무엇을 끌어왔는지 볼 수 있습니다.
+질의 파이프라인이 실제로 사용하는 환경변수는 `NEO4J_URI` · `NEO4J_USERNAME` · `NEO4J_PASSWORD` · `NEO4J_DATABASE` · `OPENAI_API_KEY` · `OPENAI_EMBEDDING_MODEL` · `OPENAI_CHAT_MODEL`입니다.
 
 ## API
 
@@ -254,15 +238,16 @@ python scripts/ask.py "위험회피회계를 적용하기 위한 요건은?" --d
 ## 저장소 정책
 
 - `.env`, API 키, DB 비밀번호는 커밋하지 않습니다.
-- 기준서 원본(PDF/HWP/HWPX)과 `data/` 파생 데이터는 커밋하지 않습니다.
-- 공개 저장소에는 코드, 스키마, 설정 예시, 문서만 포함합니다.
+- 기준서 원본(PDF/HWP/HWPX)과 색인 생성 산출물은 커밋하지 않습니다.
+- 공개 저장소에는 현재 서비스의 실행·배포에 필요한 코드와 설정만 포함합니다.
 
-## 문서
+## 저장소 구조
 
-| 파일 | 내용 |
-|---|---|
-| `PROJECT_STRUCTURE.md` | 아키텍처, 설계 결정과 그 근거, 디렉터리 구조, 구현 단계 |
-| `NEO4J_SCHEMA.md` | 노드·관계·ID 규칙·인덱스·적재 순서 |
-| `DEPLOYMENT.md` | Aura·Render·Pages 배포 절차와 함정 |
-| `REVIEW_DECISIONS.md` | 코드 리뷰에서 나온 결정과 그 이유 |
-| `PROJECT_WORKFLOW.html` | 색인·질의 흐름 시각화 |
+```text
+config/                  검색·답변 설정
+docs/images/             README 서비스 화면 자료
+scripts/                 로컬 실행·프론트엔드 배포 도구
+src/accounting_rag/      FastAPI, Hybrid 검색, 답변 생성
+tests/                   현재 서비스 경로의 회귀 테스트
+Dockerfile               Render 백엔드 이미지
+```

@@ -1,8 +1,0 @@
-{
-  "paragraph_target_chars": 900,
-  "paragraph_max_chars": 1200,
-  "table_target_chars": 1200,
-  "table_max_chars": 1800,
-  "repeated_intro_chars": 240,
-  "footnote_context_chars": 600
-}
