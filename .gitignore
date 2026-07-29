@@ -10,6 +10,14 @@ venv/
 logs/
 *.log
 
+# Project notes and generated visualizations stay local. README.md is the only
+# repository document; the service UI HTML under src/ remains tracked.
+/*.md
+!/README.md
+/*.html
+/docs/*.md
+/data/*.md
+
 # Licensed K-IFRS source documents remain local, including files kept at project root.
 *.hwp
 *.hwpx
@@ -24,7 +32,6 @@ data/embeddings/**
 data/semantic/**
 data/semantic_candidates/**
 data/validation/**
-!data/README.md
 
 # Local Neo4j/Docker runtime state.
 neo4j-data/
